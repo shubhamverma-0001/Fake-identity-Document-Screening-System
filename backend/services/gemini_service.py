@@ -132,13 +132,14 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
     Send the document image to Gemini Vision API for forensic analysis.
     Returns a parsed dict with risk_score, verdict, anomalies, etc.
     """
-    if not GEMINI_API_KEY or GEMINI_API_KEY == "your_gemini_api_key_here":
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key or api_key == "your_gemini_api_key_here":
         raise ValueError(
-            "GEMINI_API_KEY is not set. Please add your API key to backend/.env"
+            "GEMINI_API_KEY is not set. Please add your GEMINI_API_KEY in Render Dashboard -> Environment."
         )
 
     # Initialize the new google-genai client
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=api_key)
 
     prompt = build_prompt(document_type)
     image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")

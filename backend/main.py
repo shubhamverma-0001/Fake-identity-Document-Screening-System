@@ -4,7 +4,11 @@ Configures CORS, static file serving, and includes all API routers.
 """
 import logging
 import os
+import sys
 from pathlib import Path
+
+# Add backend directory to python path for module imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

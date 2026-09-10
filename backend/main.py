@@ -53,7 +53,13 @@ app.include_router(dashboard_router)
 # ── Health Check ───────────────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "AI Document Screening System"}
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_KEY") or "").strip()
+    is_set = bool(key and key != "your_gemini_api_key_here")
+    return {
+        "status": "ok",
+        "service": "AI Document Screening System",
+        "gemini_api_key": "configured" if is_set else "missing"
+    }
 
 # ── Serve Frontend Static Files ────────────────────────────────────────
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"

@@ -127,6 +127,23 @@ CANDIDATE_MODELS = [
 ]
 
 
+def _safe_int(val: Any, default: int = 50) -> int:
+    try:
+        if isinstance(val, (int, float)):
+            return max(0, min(100, int(val)))
+        if isinstance(val, str):
+            digits = re.sub(r"[^\d]", "", val)
+            if digits:
+                return max(0, min(100, int(digits)))
+            v_lower = val.lower()
+            if "high" in v_lower: return 90
+            if "med" in v_lower: return 60
+            if "low" in v_lower: return 30
+    except Exception:
+        pass
+    return default
+
+
 def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
     """
     Send the document image to Gemini Vision API for forensic analysis.
@@ -190,14 +207,20 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
         else:
             raise ValueError(f"Gemini response did not contain JSON: {raw_text[:200]}")
 
-    # Validate and sanitize fields
-    result["risk_score"] = max(0, min(100, int(result.get("risk_score", 50))))
-    result["confidence"]  = max(0, min(100, int(result.get("confidence", 70))))
-    result["verdict"]     = result.get("verdict", "SUSPICIOUS").upper()
-    if result["verdict"] not in ("GENUINE", "SUSPICIOUS", "FAKE"):
+    # Validate and sanitize fields safely without crashing on type conversion
+    result["risk_score"] = _safe_int(result.get("risk_score"), 50)
+    result["confidence"] = _safe_int(result.get("confidence"), 80)
+
+    v = str(result.get("verdict", "SUSPICIOUS")).upper()
+    if "GENUINE" in v:
+        result["verdict"] = "GENUINE"
+    elif "FAKE" in v:
+        result["verdict"] = "FAKE"
+    else:
         result["verdict"] = "SUSPICIOUS"
+
     result.setdefault("anomalies", [])
     result.setdefault("tampered_regions", [])
-    result.setdefault("summary", "Analysis complete.")
+    result.setdefault("summary", "Document screening analysis completed.")
 
     return result

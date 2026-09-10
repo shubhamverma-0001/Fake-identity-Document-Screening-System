@@ -135,11 +135,27 @@ analyzeBtn.addEventListener('click', async () => {
     clearInterval(stepInterval);
 
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.detail || `Server error: ${response.status}`);
+      let errorMsg = `Server error (${response.status})`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.detail) {
+          errorMsg = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        }
+      } catch (_) {
+        try {
+          const rawText = await response.text();
+          if (rawText) errorMsg += `: ${rawText.substring(0, 120)}`;
+        } catch (te) {}
+      }
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (pe) {
+      throw new Error('Server returned invalid response format.');
+    }
 
     // Save result to sessionStorage and navigate to report page
     sessionStorage.setItem('screening_result', JSON.stringify(result));

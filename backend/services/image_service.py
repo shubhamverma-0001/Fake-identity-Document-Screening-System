@@ -64,7 +64,7 @@ def extract_exif_flags(image_bytes: bytes) -> List[str]:
 #  Image Preprocessing
 # ─────────────────────────────────────────────
 
-def preprocess_image(image_bytes: bytes, max_size: int = 2048) -> bytes:
+def preprocess_image(image_bytes: bytes, max_size: int = 1024) -> bytes:
     """
     Resize image to max_size on the longest dimension while preserving aspect ratio.
     Returns JPEG bytes suitable for Gemini API.
@@ -75,7 +75,7 @@ def preprocess_image(image_bytes: bytes, max_size: int = 2048) -> bytes:
         ratio = max_size / max(w, h)
         img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=92)
+    img.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
 
 

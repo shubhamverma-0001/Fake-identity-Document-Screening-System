@@ -160,7 +160,7 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
                 contents=[prompt, image_part],
                 config=types.GenerateContentConfig(
                     temperature=0.1,
-                    max_output_tokens=2048,
+                    max_output_tokens=1024,
                 ),
             )
             if response and response.text:

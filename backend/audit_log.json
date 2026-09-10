@@ -1,0 +1,123 @@
+[
+  {
+    "scan_id": "EB54CFA6",
+    "document_type": "aadhaar",
+    "timestamp": "2026-09-03T08:47:33.149429+00:00",
+    "risk_score": 10,
+    "verdict": "GENUINE",
+    "confidence": 92,
+    "anomalies": [
+      {
+        "type": "Alignment",
+        "description": "Slight physical tilt and camera perspective distortion typical of a smartphone capture of a physical card.",
+        "severity": "LOW"
+      }
+    ],
+    "tampered_regions": [],
+    "summary": "The document displays standard features consistent with a physical Indian Aadhaar card, including correct font weights, standard UIDAI branding elements, and normal photographic attributes without digital tampering markers.",
+    "file_name": "WhatsApp Image 2026-07-24 at 2.40.16 PM.jpeg",
+    "file_size_kb": 127.5,
+    "exif_flags": [
+      "No EXIF metadata found \u2014 possible re-save or screenshot"
+    ]
+  },
+  {
+    "scan_id": "6C0EF416",
+    "document_type": "aadhaar",
+    "timestamp": "2026-09-03T08:37:51.293872+00:00",
+    "risk_score": 95,
+    "verdict": "FAKE",
+    "confidence": 95,
+    "anomalies": [
+      {
+        "type": "Font",
+        "description": "The Aadhaar number (7987 8341 4754) uses an incorrect typeface, weight, and spacing compared to standard UIDAI issued Aadhaar cards.",
+        "severity": "HIGH"
+      },
+      {
+        "type": "Alignment",
+        "description": "The header graphics, including the tricolor stripe and 'Government of India' text, show severe pixelation and irregular borders indicative of amateur digital cutting and pasting.",
+        "severity": "HIGH"
+      },
+      {
+        "type": "Security",
+        "description": "Complete absence of the mandatory QR code, biometric details text, and proper security features expected on the front of an Aadhaar card.",
+        "severity": "HIGH"
+      },
+      {
+        "type": "Photo",
+        "description": "The photograph exhibits an unnatural boundary and lighting mismatch with the white background of the card, showing signs of digital insertion.",
+        "severity": "HIGH"
+      }
+    ],
+    "tampered_regions": [
+      {
+        "label": "Aadhaar Number Area",
+        "x": 315,
+        "y": 635,
+        "w": 390,
+        "h": 75
+      },
+      {
+        "label": "Header Graphics",
+        "x": 235,
+        "y": 270,
+        "w": 520,
+        "h": 65
+      },
+      {
+        "label": "Citizen Photo Area",
+        "x": 70,
+        "y": 345,
+        "w": 255,
+        "h": 225
+      }
+    ],
+    "summary": "This submitted Aadhaar card lacks critical security elements such as the QR code and standard micro-text. The typography of the Aadhaar number, misalignment of header graphics, and photo insertion artifacts conclusively indicate that the document is a fabricated counterfeit.",
+    "file_name": "WhatsApp Image 2026-07-24 at 2.40.16 PM.jpeg",
+    "file_size_kb": 127.5,
+    "exif_flags": [
+      "No EXIF metadata found \u2014 possible re-save or screenshot"
+    ]
+  },
+  {
+    "scan_id": "54E85E50",
+    "document_type": "aadhaar",
+    "timestamp": "2026-09-03T08:35:28.882444+00:00",
+    "risk_score": 100,
+    "verdict": "FAKE",
+    "confidence": 100,
+    "anomalies": [
+      {
+        "type": "Security",
+        "description": "The submitted file is entirely devoid of document content, displaying only a solid red color field with no UIDAI emblems, holograms, microprinting, or standard security features.",
+        "severity": "HIGH"
+      },
+      {
+        "type": "Alignment",
+        "description": "Complete absence of layout structure, text fields, demographic data, Aadhaar number, or QR code elements required for an Indian Aadhaar Card.",
+        "severity": "HIGH"
+      },
+      {
+        "type": "Photo",
+        "description": "No portrait photograph, biometric holder representation, or document substrate is present in the image.",
+        "severity": "HIGH"
+      }
+    ],
+    "tampered_regions": [
+      {
+        "label": "Non-document / Solid color fill",
+        "x": 0,
+        "y": 0,
+        "w": 100,
+        "h": 100
+      }
+    ],
+    "summary": "The submitted image is entirely invalid as an identification document, consisting solely of a solid red pixel field with no card substrate or graphical elements. It lacks all mandatory Aadhaar features, text, security hallmarks, and photographic data. The document fails forensic verification entirely.",
+    "file_name": "test.jpg",
+    "file_size_kb": 1.3,
+    "exif_flags": [
+      "No EXIF metadata found \u2014 possible re-save or screenshot"
+    ]
+  }
+]

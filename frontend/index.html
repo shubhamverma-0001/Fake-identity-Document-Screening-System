@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocShield AI — Admin Dashboard</title>
+  <meta name="description" content="AI-powered fake identity and document screening system admin dashboard. Real-time forensic analysis powered by Google Gemini Vision.">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <style>
+    .fraud-rate-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+    .fraud-rate-pct  { position: absolute; font-size: 22px; font-weight: 800; text-align: center; }
+    .fraud-rate-sub  { font-size: 10px; font-weight: 500; color: var(--text-muted); display: block; }
+    .empty-history {
+      text-align: center; padding: 48px; color: var(--text-muted); font-size: 14px;
+    }
+    .live-dot {
+      width: 8px; height: 8px; background: var(--genuine); border-radius: 50%;
+      display: inline-block; margin-right: 6px;
+      animation: pulse-dot 2s infinite;
+    }
+    .system-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--genuine);
+      background: var(--genuine-bg); border: 1px solid var(--genuine-glow);
+      padding: 6px 14px; border-radius: 99px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <a class="brand-logo" href="/">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <div class="brand-name">DocShield AI</div>
+          <div class="brand-subtitle">Document Forensics</div>
+        </div>
+      </a>
+    </div>
+
+    <span class="nav-section-label">Main</span>
+    <a class="nav-item active" href="/">
+      <span class="nav-icon">📊</span> Dashboard
+    </a>
+    <a class="nav-item" href="/screen">
+      <span class="nav-icon">🔍</span> Screen Document
+    </a>
+    <a class="nav-item" href="/report">
+      <span class="nav-icon">📋</span> Last Report
+    </a>
+
+    <span class="nav-section-label">System</span>
+    <a class="nav-item" href="/docs" target="_blank">
+      <span class="nav-icon">⚙️</span> API Docs
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">SIH 2026 · DocShield AI v1.0</div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+
+    <!-- Header -->
+    <div class="page-header fade-in">
+      <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Real-time document screening overview</p>
+      </div>
+      <div class="header-actions">
+        <div class="system-status" id="system-status">
+          <span class="live-dot"></span> Checking...
+        </div>
+        <a class="btn btn-primary" href="/screen">
+          <span>🔍</span> New Scan
+        </a>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+      <div class="stat-card total fade-in stagger-1">
+        <div class="stat-icon total">📄</div>
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Total Documents Screened</div>
+        <div class="stat-change" id="stat-total-sub">Loading...</div>
+      </div>
+      <div class="stat-card genuine fade-in stagger-2">
+        <div class="stat-icon genuine">✅</div>
+        <div class="stat-value" id="stat-genuine">—</div>
+        <div class="stat-label">Genuine Documents</div>
+        <div class="stat-change" id="stat-genuine-sub">Loading...</div>
+      </div>
+      <div class="stat-card suspicious fade-in stagger-3">
+        <div class="stat-icon suspicious">⚠️</div>
+        <div class="stat-value" id="stat-suspicious">—</div>
+        <div class="stat-label">Suspicious (Review)</div>
+        <div class="stat-change" id="stat-suspicious-sub">Loading...</div>
+      </div>
+      <div class="stat-card fake fade-in stagger-4">
+        <div class="stat-icon fake">🚫</div>
+        <div class="stat-value" id="stat-fake">—</div>
+        <div class="stat-label">Forgeries Detected</div>
+        <div class="stat-change" id="stat-fake-sub">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Charts + Quick Actions Row -->
+    <div class="grid-2 mb-6">
+
+      <!-- Fraud Rate Donut -->
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">📈</span> Fraud Distribution</div>
+        </div>
+        <div class="donut-wrapper">
+          <div class="fraud-rate-ring">
+            <svg id="donut-svg" width="150" height="150" viewBox="0 0 150 150">
+              <circle cx="75" cy="75" r="58" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="18"/>
+              <circle id="donut-genuine"   cx="75" cy="75" r="58" fill="none" stroke="#10b981" stroke-width="18" stroke-linecap="round" stroke-dasharray="364" stroke-dashoffset="364" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg);transition:stroke-dashoffset 1.2s ease"/>
+              <circle id="donut-suspicious" cx="75" cy="75" r="58" fill="none" stroke="#f59e0b" stroke-width="18" stroke-linecap="round" stroke-dasharray="364" stroke-dashoffset="364" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg);transition:stroke-dashoffset 1.2s ease 0.3s"/>
+              <circle id="donut-fake"       cx="75" cy="75" r="58" fill="none" stroke="#ef4444" stroke-width="18" stroke-linecap="round" stroke-dasharray="364" stroke-dashoffset="364" style="transform-box:fill-box;transform-origin:center;transform:rotate(-90deg);transition:stroke-dashoffset 1.2s ease 0.6s"/>
+            </svg>
+            <div class="fraud-rate-pct">
+              <span id="fraud-pct">0%</span>
+              <span class="fraud-rate-sub">fraud rate</span>
+            </div>
+          </div>
+          <div class="donut-legend">
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--genuine)"></div>
+              <span>Genuine</span>
+              <span class="legend-value" id="legend-genuine">0</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--suspicious)"></div>
+              <span>Suspicious</span>
+              <span class="legend-value" id="legend-suspicious">0</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--fake)"></div>
+              <span>Fake</span>
+              <span class="legend-value" id="legend-fake">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card fade-in">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">⚡</span> Quick Actions</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <a class="btn btn-primary btn-lg w-full" href="/screen" style="justify-content:center">
+            🔍 &nbsp;Screen a New Document
+          </a>
+          <a class="btn btn-secondary btn-lg w-full" href="/report" style="justify-content:center">
+            📋 &nbsp;View Last Report
+          </a>
+          <a class="btn btn-secondary btn-lg w-full" href="http://localhost:8000/api/history" target="_blank" style="justify-content:center">
+            📥 &nbsp;Export Full History (JSON)
+          </a>
+          <button class="btn btn-danger btn-lg w-full" onclick="refreshDashboard()" style="justify-content:center">
+            🔄 &nbsp;Refresh Stats
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Scans Table -->
+    <div class="card fade-in">
+      <div class="card-header">
+        <div class="card-title"><span class="card-title-icon">🕒</span> Recent Screening History</div>
+        <a class="btn btn-secondary" href="http://localhost:8000/api/history" target="_blank">View All</a>
+      </div>
+      <div class="table-wrapper">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Scan ID</th>
+              <th>File Name</th>
+              <th>Document Type</th>
+              <th>Risk Score</th>
+              <th>Verdict</th>
+              <th>Anomalies</th>
+              <th>Scanned At</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr><td colspan="7" class="empty-history">Loading history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  const C = 2 * Math.PI * 58; // circumference for r=58
+
+  async function loadStats() {
+    try {
+      const [statsRes, histRes] = await Promise.all([
+        fetch(`${API_BASE}/api/stats`),
+        fetch(`${API_BASE}/api/history`),
+      ]);
+
+      if (!statsRes.ok) throw new Error('Stats unavailable');
+      const stats = await statsRes.json();
+      const hist  = histRes.ok ? await histRes.json() : { history: [] };
+
+      const { total_scans: total, genuine_count: gen, suspicious_count: sus, fake_count: fake, fraud_rate } = stats;
+
+      // Update stat cards
+      animateCount('stat-total', total);
+      animateCount('stat-genuine', gen);
+      animateCount('stat-suspicious', sus);
+      animateCount('stat-fake', fake);
+
+      document.getElementById('stat-total-sub').textContent =
+        total > 0 ? `${fraud_rate}% fraud rate` : 'No scans yet';
+      document.getElementById('stat-genuine-sub').textContent =
+        total > 0 ? `${((gen/total)*100).toFixed(1)}% of total` : '—';
+      document.getElementById('stat-suspicious-sub').textContent =
+        total > 0 ? `${((sus/total)*100).toFixed(1)}% of total` : '—';
+      document.getElementById('stat-fake-sub').textContent =
+        total > 0 ? `${((fake/total)*100).toFixed(1)}% of total` : '—';
+
+      // Donut chart
+      renderDonut(gen, sus, fake, total, fraud_rate);
+
+      // Legend
+      document.getElementById('legend-genuine').textContent = gen;
+      document.getElementById('legend-suspicious').textContent = sus;
+      document.getElementById('legend-fake').textContent = fake;
+      document.getElementById('fraud-pct').textContent = `${fraud_rate}%`;
+
+      // History table
+      renderHistoryTable(hist.history || stats.recent_scans || []);
+
+      // Status
+      document.getElementById('system-status').innerHTML =
+        '<span class="live-dot"></span> System Online';
+
+    } catch (err) {
+      document.getElementById('system-status').innerHTML =
+        '🔴 Backend Offline';
+      document.getElementById('system-status').style.color = 'var(--fake)';
+      document.getElementById('system-status').style.background = 'var(--fake-bg)';
+      document.getElementById('system-status').style.borderColor = 'var(--fake-glow)';
+      console.warn('Could not load stats:', err.message);
+    }
+  }
+
+  function animateCount(id, target) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let cur = 0;
+    const step = Math.ceil(target / 30);
+    const iv = setInterval(() => {
+      cur = Math.min(cur + step, target);
+      el.textContent = cur;
+      if (cur >= target) clearInterval(iv);
+    }, 40);
+  }
+
+  function renderDonut(gen, sus, fake, total, fraudRate) {
+    if (total === 0) return;
+    const genOffset  = C - (gen / total) * C;
+    const susOffset  = C - (sus / total) * C;
+    const fakeOffset = C - (fake / total) * C;
+
+    const genDeg  = (gen  / total) * 360;
+    const susDeg  = (sus  / total) * 360;
+
+    setTimeout(() => {
+      // Genuine starts at -90deg (top)
+      document.getElementById('donut-genuine').style.transform = 'rotate(-90deg)';
+      document.getElementById('donut-genuine').style.strokeDashoffset = genOffset;
+      // Suspicious starts where genuine ends
+      document.getElementById('donut-suspicious').style.transform = `rotate(${-90 + genDeg}deg)`;
+      document.getElementById('donut-suspicious').style.strokeDashoffset = susOffset;
+      // Fake starts where suspicious ends
+      document.getElementById('donut-fake').style.transform = `rotate(${-90 + genDeg + susDeg}deg)`;
+      document.getElementById('donut-fake').style.strokeDashoffset = fakeOffset;
+    }, 300);
+  }
+
+  function renderHistoryTable(history) {
+    const tbody = document.getElementById('history-body');
+    if (!history || history.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-history">📭 No screening history yet. <a href="/screen" style="color:var(--accent-light)">Run your first scan →</a></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = history.slice(0, 10).map(entry => {
+      const score = entry.risk_score ?? 0;
+      const color = riskColor(score);
+      const v = (entry.verdict || 'SUSPICIOUS').toUpperCase();
+      return `
+        <tr>
+          <td class="td-mono">#${entry.scan_id || '—'}</td>
+          <td style="color:var(--text-primary);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${entry.file_name || ''}">${entry.file_name || '—'}</td>
+          <td>${docLabel(entry.document_type)}</td>
+          <td>
+            <div class="risk-bar-wrap">
+              <div class="risk-bar-bg">
+                <div class="risk-bar-fill" style="width:${score}%;background:${color}"></div>
+              </div>
+              <span class="risk-score-num" style="color:${color}">${score}</span>
+            </div>
+          </td>
+          <td><span class="badge badge-${verdictClass(v)}">${v}</span></td>
+          <td style="color:var(--text-secondary)">${(entry.anomalies || []).length}</td>
+          <td style="color:var(--text-muted);font-size:12px">${formatDateTime(entry.timestamp)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function refreshDashboard() { loadStats(); showToast('Dashboard refreshed!', 'success'); }
+
+  loadStats();
+  // Auto-refresh every 30 seconds
+  setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

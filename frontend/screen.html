@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocShield AI — Screen Document</title>
+  <meta name="description" content="Upload and screen identity documents for forgery and tampering using AI-powered forensic analysis.">
+  <link rel="stylesheet" href="css/styles.css?v=3">
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <a class="brand-logo" href="/">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <div class="brand-name">DocShield AI</div>
+          <div class="brand-subtitle">Document Forensics</div>
+        </div>
+      </a>
+    </div>
+    <span class="nav-section-label">Main</span>
+    <a class="nav-item" href="/">
+      <span class="nav-icon">📊</span> Dashboard
+    </a>
+    <a class="nav-item active" href="/screen">
+      <span class="nav-icon">🔍</span> Screen Document
+    </a>
+    <a class="nav-item" href="/report">
+      <span class="nav-icon">📋</span> Last Report
+    </a>
+    <span class="nav-section-label">System</span>
+    <a class="nav-item" href="/docs" target="_blank">
+      <span class="nav-icon">⚙️</span> API Docs
+    </a>
+    <div class="sidebar-footer">
+      <div class="sidebar-footer-text">SIH 2026 · DocShield AI v1.0</div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+
+    <!-- Header -->
+    <div class="page-header fade-in">
+      <div>
+        <h1 class="page-title">Screen Document</h1>
+        <p class="page-subtitle">Upload an identity document to analyze for forgery and tampering</p>
+      </div>
+      <a class="btn btn-secondary" href="/">← Back to Dashboard</a>
+    </div>
+
+    <div class="grid-2" style="align-items:start">
+
+      <!-- Left Column: Upload + Doc Type -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <!-- Upload Card -->
+        <div class="card fade-in stagger-1">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">📤</span> Upload Document</div>
+          </div>
+
+          <div class="upload-zone" id="drop-zone">
+            <input type="file" id="file-input" accept="image/*" style="display:none">
+            <span class="upload-icon">🗂️</span>
+            <div class="upload-title">Drop your document here</div>
+            <div class="upload-subtitle">or click to browse files</div>
+            <div class="upload-formats">
+              <span class="format-chip">JPG</span>
+              <span class="format-chip">PNG</span>
+              <span class="format-chip">WebP</span>
+              <span class="format-chip">BMP</span>
+              <span class="format-chip">Max 10 MB</span>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="upload-preview" id="upload-preview">
+            <img id="preview-img" alt="Document preview">
+            <div class="upload-preview-info">
+              <span id="preview-name" style="color:var(--text-primary);font-weight:500">—</span>
+              <span id="preview-size" style="color:var(--text-muted)">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Document Type Card -->
+        <div class="card fade-in stagger-2">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">🪪</span> Document Type</div>
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:4px">
+            Select the type of document for context-aware analysis:
+          </p>
+          <div class="doc-type-grid">
+            <div class="doc-type-btn" data-type="aadhaar">
+              <span class="doc-type-icon">🆔</span>
+              <div class="doc-type-name">Aadhaar Card</div>
+            </div>
+            <div class="doc-type-btn" data-type="passport">
+              <span class="doc-type-icon">📘</span>
+              <div class="doc-type-name">Passport</div>
+            </div>
+            <div class="doc-type-btn" data-type="pan">
+              <span class="doc-type-icon">💳</span>
+              <div class="doc-type-name">PAN Card</div>
+            </div>
+            <div class="doc-type-btn" data-type="driving_license">
+              <span class="doc-type-icon">🚗</span>
+              <div class="doc-type-name">Driving License</div>
+            </div>
+            <div class="doc-type-btn" data-type="other">
+              <span class="doc-type-icon">📄</span>
+              <div class="doc-type-name">Other</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Guidelines + Analyze -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <!-- Analyze Button Card -->
+        <div class="card fade-in stagger-3" style="border-color:var(--border-accent)">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">🤖</span> AI Analysis</div>
+          </div>
+          <p style="font-size:13.5px;color:var(--text-secondary);margin-bottom:20px;line-height:1.7">
+            Our forensic AI powered by <strong style="color:var(--accent-light)">Google Gemini Vision</strong> will analyze 
+            the document for font anomalies, pixel manipulation, alignment irregularities, 
+            security feature tampering, and metadata flags.
+          </p>
+          <button class="btn btn-primary btn-lg w-full" id="analyze-btn" disabled style="justify-content:center;font-size:16px;padding:16px">
+            🔍 &nbsp;Analyze Document
+          </button>
+          <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-top:12px">
+            Analysis typically takes 5–15 seconds
+          </p>
+        </div>
+
+        <!-- What we check -->
+        <div class="card fade-in stagger-4">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">🧪</span> Detection Capabilities</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px" id="detection-list"></div>
+        </div>
+
+        <!-- Privacy Notice -->
+        <div class="card fade-in" style="background:rgba(99,102,241,0.05);border-color:var(--border-accent)">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:24px">🔒</span>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--accent-light);margin-bottom:4px">Privacy & Security</div>
+              <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+                Documents are processed locally and via Google Gemini API. No data is stored permanently. 
+                Only analysis metadata is saved to the audit log (not the document images).
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Loading Overlay ── -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-title">Analyzing Document...</div>
+  <div class="loading-steps">
+    <div class="loading-step" id="step-upload">
+      <div class="loading-step-icon">1</div>
+      <span>Uploading document securely</span>
+    </div>
+    <div class="loading-step" id="step-exif">
+      <div class="loading-step-icon">2</div>
+      <span>Extracting EXIF metadata</span>
+    </div>
+    <div class="loading-step" id="step-preproc">
+      <div class="loading-step-icon">3</div>
+      <span>Preprocessing image</span>
+    </div>
+    <div class="loading-step" id="step-ai">
+      <div class="loading-step-icon">4</div>
+      <span>Running Gemini Vision AI analysis</span>
+    </div>
+    <div class="loading-step" id="step-annotate">
+      <div class="loading-step-icon">5</div>
+      <span>Generating annotated report</span>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/upload.js"></script>
+<script>
+  // Populate Detection Capabilities list
+  const DETECTION_ITEMS = [
+    ['🔤', 'Font Analysis',       'Mixed typefaces, spacing errors, pixel artifacts'],
+    ['🖼️', 'Image Manipulation', 'Clone stamp, healing brush, compression artifacts'],
+    ['📐', 'Alignment Checks',   'Skewed text, off-center logos, wrong margins'],
+    ['🔐', 'Security Features',  'Hologram, QR code, MRZ, watermark integrity'],
+    ['👤', 'Photo Integrity',    'Digitally inserted face, background inconsistency'],
+    ['📊', 'Metadata Analysis',  'EXIF editing software, timestamp anomalies'],
+  ];
+  document.getElementById('detection-list').innerHTML = DETECTION_ITEMS.map(
+    ([icon, title, desc]) => `
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px;background:var(--bg-glass);border-radius:var(--radius-sm)">
+        <span style="font-size:18px;flex-shrink:0">${icon}</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${title}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${desc}</div>
+        </div>
+      </div>`
+  ).join('');
+</script>
+</body>
+</html>

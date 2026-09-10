@@ -161,6 +161,7 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
                 config=types.GenerateContentConfig(
                     temperature=0.1,
                     max_output_tokens=1024,
+                    response_mime_type="application/json",
                 ),
             )
             if response and response.text:
@@ -176,12 +177,18 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
     raw_text = response.text.strip()
     logger.info(f"Gemini raw response: {raw_text[:300]}...")
 
-    # Extract JSON — strip any accidental markdown fences
-    json_match = re.search(r"\{[\s\S]*\}", raw_text)
-    if not json_match:
-        raise ValueError(f"Gemini did not return valid JSON. Response: {raw_text[:200]}")
-
-    result = json.loads(json_match.group())
+    # Extract JSON robustly
+    try:
+        result = json.loads(raw_text)
+    except Exception:
+        json_match = re.search(r"\{[\s\S]*\}", raw_text)
+        if json_match:
+            try:
+                result = json.loads(json_match.group())
+            except Exception as pe:
+                raise ValueError(f"Gemini returned invalid JSON content: {raw_text[:200]}")
+        else:
+            raise ValueError(f"Gemini response did not contain JSON: {raw_text[:200]}")
 
     # Validate and sanitize fields
     result["risk_score"] = max(0, min(100, int(result.get("risk_score", 50))))

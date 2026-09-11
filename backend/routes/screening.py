@@ -67,7 +67,7 @@ async def screen_document(
 
         # ── AI Analysis (offloaded to threadpool) ─────────────────────
         logger.info(f"[{scan_id}] Sending to Gemini — doc_type={document_type}, size={file_size_kb}KB")
-        ai_result = await asyncio.to_thread(analyze_document, processed_bytes, document_type)
+        ai_result = await asyncio.to_thread(analyze_document, processed_bytes, document_type, exif_flags)
 
         # ── Annotate Image (offloaded to threadpool) ──────────────────
         annotated_bytes = await asyncio.to_thread(

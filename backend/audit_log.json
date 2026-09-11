@@ -1,5 +1,45 @@
 [
   {
+    "scan_id": "78F1FB6B",
+    "document_type": "aadhaar",
+    "timestamp": "2026-09-11T14:44:41.206865+00:00",
+    "risk_score": 65,
+    "verdict": "FAKE",
+    "confidence": 88,
+    "anomalies": [
+      {
+        "type": "Metadata",
+        "description": "No EXIF metadata found \u2014 possible re-save or screenshot",
+        "severity": "LOW"
+      },
+      {
+        "type": "Alignment",
+        "description": "Non-standard document aspect ratio (1.0:1). Standard Indian ID card aspect ratio is ~1.58:1.",
+        "severity": "MEDIUM"
+      },
+      {
+        "type": "Photo",
+        "description": "High digital contrast/edge variance detected around portrait photo region (indicative of inserted photo).",
+        "severity": "HIGH"
+      }
+    ],
+    "tampered_regions": [
+      {
+        "label": "Inserted Portrait Photo",
+        "x": 5.1,
+        "y": 31.0,
+        "w": 20.2,
+        "h": 20.2
+      }
+    ],
+    "summary": "Local forensic computer vision scan completed for AADHAAR. Analyzed JPEG Error Level Analysis (ELA), layout structure, face boundary insertion, and EXIF flags. Detected 3 anomaly indicator(s).",
+    "file_name": "elon musk aadhar.jpg",
+    "file_size_kb": 45.9,
+    "exif_flags": [
+      "No EXIF metadata found \u2014 possible re-save or screenshot"
+    ]
+  },
+  {
     "scan_id": "EB54CFA6",
     "document_type": "aadhaar",
     "timestamp": "2026-09-03T08:47:33.149429+00:00",

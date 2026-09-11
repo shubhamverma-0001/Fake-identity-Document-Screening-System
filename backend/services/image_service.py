@@ -61,8 +61,229 @@ def extract_exif_flags(image_bytes: bytes) -> List[str]:
 
 
 # ─────────────────────────────────────────────
+#  Error Level Analysis (ELA) & CV Forensics
+# ─────────────────────────────────────────────
+
+def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any]:
+    """
+    Perform Error Level Analysis (ELA) to identify localized JPEG compression anomalies.
+    Digitally edited or pasted regions (text/photo edits) compress at different rates
+    than the original document background.
+    """
+    try:
+        orig_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        w, h = orig_pil.size
+        if w < 50 or h < 50:
+            return {"ela_score": 0, "tampered_regions": [], "anomalies": []}
+
+        # Save to JPEG buffer at quality
+        buf = io.BytesIO()
+        orig_pil.save(buf, format="JPEG", quality=quality)
+        buf.seek(0)
+        recompressed_pil = Image.open(buf).convert("RGB")
+
+        orig_np = np.array(orig_pil, dtype=np.float32)
+        recomp_np = np.array(recompressed_pil, dtype=np.float32)
+
+        # Calculate absolute difference per pixel
+        diff = np.abs(orig_np - recomp_np)
+        diff_grayscale = np.mean(diff, axis=2)  # (H, W)
+
+        mean_diff = float(np.mean(diff_grayscale))
+        std_diff = float(np.std(diff_grayscale))
+        max_diff = float(np.max(diff_grayscale))
+
+        tampered_regions = []
+        anomalies = []
+        ela_score = 0
+
+        # Divide into grid (e.g. 10x10) to find localized anomalies
+        grid_rows, grid_cols = 8, 8
+        cell_h, cell_w = h / grid_rows, w / grid_cols
+
+        cell_means = []
+        cells_info = []
+
+        for r in range(grid_rows):
+            for c in range(grid_cols):
+                y1, y2 = int(r * cell_h), int((r + 1) * cell_h)
+                x1, x2 = int(c * cell_w), int((c + 1) * cell_w)
+                cell_diff = diff_grayscale[y1:y2, x1:x2]
+                c_mean = float(np.mean(cell_diff))
+                cell_means.append(c_mean)
+                cells_info.append((r, c, x1, y1, x2 - x1, y2 - y1, c_mean))
+
+        overall_cell_mean = np.mean(cell_means)
+        overall_cell_std = np.std(cell_means)
+
+        # Outlier grid cells indicate localized editing / pasting
+        for r, c, x1, y1, cw, ch, c_mean in cells_info:
+            if overall_cell_std > 0.5 and (c_mean - overall_cell_mean) > (2.2 * overall_cell_std) and c_mean > 8.0:
+                x_pct = round((x1 / w) * 100, 1)
+                y_pct = round((y1 / h) * 100, 1)
+                w_pct = round((cw / w) * 100, 1)
+                h_pct = round((ch / h) * 100, 1)
+
+                tampered_regions.append({
+                    "label": "ELA Editing Disparity",
+                    "x": x_pct,
+                    "y": y_pct,
+                    "w": w_pct,
+                    "h": h_pct,
+                })
+
+        if tampered_regions:
+            ela_score = min(85, 30 + len(tampered_regions) * 15)
+            anomalies.append({
+                "type": "Manipulation",
+                "description": f"Error Level Analysis (ELA) detected {len(tampered_regions)} region(s) with anomalous re-compression levels typical of localized digital photo or text editing.",
+                "severity": "HIGH" if len(tampered_regions) >= 2 else "MEDIUM"
+            })
+        elif max_diff > 45 and std_diff > 12:
+            ela_score = 35
+            anomalies.append({
+                "type": "Manipulation",
+                "description": "High global ELA variance detected across image layers.",
+                "severity": "MEDIUM"
+            })
+
+        return {
+            "ela_score": ela_score,
+            "mean_diff": round(mean_diff, 2),
+            "std_diff": round(std_diff, 2),
+            "max_diff": round(max_diff, 2),
+            "tampered_regions": tampered_regions,
+            "anomalies": anomalies,
+        }
+    except Exception as ex:
+        return {"ela_score": 0, "tampered_regions": [], "anomalies": []}
+
+
+def analyze_regional_noise(image_bytes: bytes) -> Dict[str, Any]:
+    """
+    Analyze high-frequency noise variance across document sub-regions.
+    Pasted text or photo elements exhibit inconsistent noise variance relative to document card background.
+    """
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return {"noise_score": 0, "anomalies": []}
+
+        h, w = img.shape
+        # Compute local noise using Laplacian
+        lap = cv2.Laplacian(img, cv2.CV_64F)
+        var = lap.var()
+
+        anomalies = []
+        noise_score = 0
+
+        # Extremely uniform / zero noise across image can indicate synthetic digital template creation
+        if var < 15.0:
+            noise_score = 25
+            anomalies.append({
+                "type": "ImageQuality",
+                "description": "Artificially low image noise variance detected — signature of synthetic digital template or heavy blur filter.",
+                "severity": "MEDIUM"
+            })
+
+        return {"noise_score": noise_score, "var": round(var, 2), "anomalies": anomalies}
+    except Exception:
+        return {"noise_score": 0, "anomalies": []}
+
+
+
+def analyze_document_layout_and_face(image_bytes: bytes, document_type: str) -> Tuple[int, List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Perform local computer vision analysis on document layout, aspect ratio,
+    header color palette, and portrait photo boundary insertion.
+    """
+    anomalies = []
+    tampered_regions = []
+    score = 0
+
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return score, anomalies, tampered_regions
+
+        h, w = img.shape[:2]
+        aspect_ratio = round(w / float(h), 2)
+
+        # 1. Aspect Ratio Verification for ID Cards
+        if document_type.lower() in ["aadhaar", "pan", "driving_license"]:
+            if aspect_ratio < 1.3 or aspect_ratio > 2.1:
+                score += 25
+                anomalies.append({
+                    "type": "Alignment",
+                    "description": f"Non-standard document aspect ratio ({aspect_ratio}:1). Standard Indian ID card aspect ratio is ~1.58:1.",
+                    "severity": "MEDIUM"
+                })
+
+        # 2. Aadhaar Header Banner Color & Background Palette Check
+        if document_type.lower() == "aadhaar":
+            header = img[0:int(h * 0.25), :]
+            if header.size > 0:
+                h_hsv = cv2.cvtColor(header, cv2.COLOR_BGR2HSV)
+                blue_mask = cv2.inRange(h_hsv, np.array([85, 30, 30]), np.array([135, 255, 255]))
+                blue_pct = (np.count_nonzero(blue_mask) / float(header.shape[0] * header.shape[1])) * 100
+
+                red_mask1 = cv2.inRange(h_hsv, np.array([0, 40, 40]), np.array([10, 255, 255]))
+                red_mask2 = cv2.inRange(h_hsv, np.array([170, 40, 40]), np.array([180, 255, 255]))
+                red_pct = ((np.count_nonzero(red_mask1) + np.count_nonzero(red_mask2)) / float(header.shape[0] * header.shape[1])) * 100
+
+                if blue_pct < 1.5 and red_pct < 1.5:
+                    score += 30
+                    anomalies.append({
+                        "type": "Security",
+                        "description": "Mandatory UIDAI blue/cyan header banner background is missing or unverified.",
+                        "severity": "HIGH"
+                    })
+
+        # 3. Face Detection & Portrait Photo Insertion Analysis
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
+
+        if len(faces) > 0:
+            for (fx, fy, fw, fh) in faces:
+                x_pct = (fx / w) * 100
+                y_pct = (fy / h) * 100
+                w_pct = (fw / w) * 100
+                h_pct = (fh / h) * 100
+
+                y1, y2 = max(0, fy - 5), min(h, fy + fh + 5)
+                x1, x2 = max(0, fx - 5), min(w, fx + fw + 5)
+                face_roi = gray[y1:y2, x1:x2]
+                if face_roi.size > 0:
+                    lap_face = cv2.Laplacian(face_roi, cv2.CV_64F).var()
+                    if lap_face > 1000:
+                        score += 25
+                        anomalies.append({
+                            "type": "Photo",
+                            "description": "High digital contrast/edge variance detected around portrait photo region (indicative of inserted photo).",
+                            "severity": "HIGH"
+                        })
+                        tampered_regions.append({
+                            "label": "Inserted Portrait Photo",
+                            "x": round(x_pct, 1),
+                            "y": round(y_pct, 1),
+                            "w": round(w_pct, 1),
+                            "h": round(h_pct, 1)
+                        })
+
+    except Exception:
+        pass
+
+    return score, anomalies, tampered_regions
+
+
+# ─────────────────────────────────────────────
 #  Image Preprocessing
 # ─────────────────────────────────────────────
+
 
 def preprocess_image(image_bytes: bytes, max_size: int = 1024) -> bytes:
     """

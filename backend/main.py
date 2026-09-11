@@ -20,6 +20,8 @@ from routes.screening import router as screening_router
 from routes.dashboard import router as dashboard_router
 
 # ── Load environment variables ─────────────────────────────────────────
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
 load_dotenv()
 
 # ── Logging ────────────────────────────────────────────────────────────

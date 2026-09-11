@@ -1,23 +1,37 @@
-"""
-Google Gemini Vision API service for document forgery detection.
-Uses the new google-genai SDK (google.genai).
-"""
 import os
+import io
 import json
 import re
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+import cv2
+import numpy as np
+from PIL import Image
 
+from services.image_service import (
+    perform_ela_analysis, 
+    analyze_regional_noise,
+    analyze_document_layout_and_face,
+)
+
+from pathlib import Path
+
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME = "gemini-2.5-flash"
+GEMINI_API_KEY = (
+    os.getenv("GEMINI_API_KEY") or 
+    os.getenv("GOOGLE_API_KEY") or 
+    os.getenv("GEMINI_KEY") or ""
+).strip().strip('"').strip("'")
+MODEL_NAME = "gemini-3.5-flash"
 
 # ─────────────────────────────────────────────
 #  Document-type specific context hints
@@ -25,7 +39,7 @@ MODEL_NAME = "gemini-2.5-flash"
 
 DOC_HINTS = {
     "aadhaar": (
-        "This is an Indian Aadhaar Card. It should have: a 12-digit Aadhaar number, "
+        "This is an Indian Aadhaar Card. It should have: a 12-digit Aadhaar number (e.g. 1234 5678 9012), "
         "the UIDAI hologram/logo, the Indian government emblem, a QR code, the citizen's "
         "photo, name, DOB, and address in English and one regional language. "
         "The card has a standard blue-white gradient design."
@@ -37,8 +51,8 @@ DOC_HINTS = {
     ),
     "pan": (
         "This is an Indian PAN Card (Permanent Account Number). It should have: "
-        "a 10-character alphanumeric PAN number, the Income Tax Department logo, "
-        "the holder's photo and signature, name, father's name, and date of birth."
+        "a 10-character alphanumeric PAN number (formatted as 5 letters, 4 digits, 1 letter, e.g., ABCDE1234F), "
+        "the Income Tax Department logo, the holder's photo and signature, name, father's name, and date of birth."
     ),
     "driving_license": (
         "This is an Indian Driving License. It should have: the transport department logo, "
@@ -55,37 +69,43 @@ DOC_HINTS = {
 #  Prompt Builder
 # ─────────────────────────────────────────────
 
-def build_prompt(document_type: str) -> str:
+def build_prompt(document_type: str, exif_flags: Optional[List[str]] = None) -> str:
     hint = DOC_HINTS.get(document_type.lower(), DOC_HINTS["other"])
+    exif_text = ""
+    if exif_flags:
+        exif_text = "\nEXIF Metadata Analysis Warnings:\n" + "\n".join([f"- {f}" for f in exif_flags])
+
     return f"""You are a senior forensic document authentication expert with 20 years of experience 
-detecting forged and tampered identity documents for law enforcement agencies.
+detecting forged, edited, and tampered identity documents for law enforcement agencies.
 
 Document Context: {hint}
+{exif_text}
 
-Carefully analyze this document image for ALL of the following:
+Carefully analyze this document image for ALL of the following forensic indicators:
 
-1. **Font Analysis**: Look for inconsistent fonts, mixed typefaces, incorrect character spacing, 
-   pixelation around text edges, or fonts that don't match genuine templates.
+1. **Font Analysis & Text Alterations**: Look for inconsistent fonts, mixed typefaces, altered digits, 
+   incorrect character spacing, pixelation/blur halos around individual text fields (e.g. name, ID number, DOB), 
+   or text fonts that don't match genuine government templates.
 
-2. **Image Manipulation**: Detect clone stamp artifacts, healing brush marks, blur/sharpen halos, 
-   JPEG compression artifacts in localized areas, inconsistent noise patterns.
+2. **Image Manipulation & Digital Editing**: Detect clone stamp artifacts, digital text pasting, 
+   mismatched JPEG compression artifacts in localized text areas, blur/sharpen boundaries around photos or text.
 
-3. **Alignment & Layout**: Check for misaligned text, incorrect margins, skewed elements, 
-   off-center logos, or spacing that doesn't match genuine templates.
+3. **Alignment & Layout**: Check for misaligned text, incorrect margins, skewed ID numbers, 
+   off-center logos, or layout spacing that deviates from standard templates.
 
 4. **Security Features**: Assess the authenticity of holograms, watermarks, seals, QR codes, 
    MRZ lines, and government emblems.
 
-5. **Photo Integrity**: Check if the face photo appears genuine, consistent background, 
-   no digital insertion artifacts, correct aspect ratio for the document type.
+5. **Photo Integrity**: Check if the face photo appears genuine, inserted, or swapped, 
+   consistent background lighting, no digital border artifacts around the face cutout.
 
-6. **Color & Lighting**: Identify unnatural color gradients, inconsistent lighting, 
-   shadows that don't match, or color bleeding between elements.
+6. **Color & Lighting**: Identify unnatural color gradients, inconsistent background lighting, 
+   shadows that don't match, or color bleeding between text and background.
 
-7. **Data Consistency**: Cross-check visible dates, numbers, and codes for logical consistency 
-   (e.g., issue date before expiry, age matching DOB).
+7. **Data Consistency & ID Rules**: Cross-check visible dates, numbers, and codes for format consistency 
+   (e.g., Aadhaar = 12 digits, PAN = 5 letters + 4 numbers + 1 letter, issue date before expiry).
 
-Based on your analysis, respond ONLY with a valid JSON object (no markdown, no explanation outside JSON):
+Based on your analysis, respond ONLY with a valid JSON object (no markdown formatting outside JSON):
 
 {{
   "risk_score": <integer 0-100, where 0=certainly genuine, 100=certainly fake>,
@@ -93,7 +113,7 @@ Based on your analysis, respond ONLY with a valid JSON object (no markdown, no e
   "confidence": <integer 0-100>,
   "anomalies": [
     {{
-      "type": "<category: Font|Manipulation|Alignment|Security|Photo|Color|DataConsistency>",
+      "type": "<category: Font|Manipulation|Alignment|Security|Photo|Color|DataConsistency|Metadata>",
       "description": "<specific, detailed description of the anomaly>",
       "severity": "<LOW|MEDIUM|HIGH>"
     }}
@@ -107,23 +127,21 @@ Based on your analysis, respond ONLY with a valid JSON object (no markdown, no e
       "h": <height as % of image height, 0-100>
     }}
   ],
-  "summary": "<2-3 sentence expert summary of findings>"
+  "summary": "<2-3 sentence expert forensic summary of findings>"
 }}
 
     Rules:
-    - Standard photographs, mobile camera uploads, scans, and compressed images are NORMAL for genuine documents.
-    - Do NOT mark a document as FAKE or SUSPICIOUS simply due to JPEG compression, camera angle, glare, or scan resolution.
-    - Only declare FAKE if there is clear, undeniable visual evidence of deliberate text editing (e.g., altered digits, mismatched typefaces, digitally pasted text/photo).
-    - If the document looks authentic and consistent with a real government ID, assign risk_score 0-15 and verdict GENUINE.
-    - risk_score 0-20 → GENUINE, 21-60 → SUSPICIOUS, 61-100 → FAKE
-    - tampered_regions should only include areas with clear HIGH or MEDIUM severity anomalies.
+    - Be rigorous and objective. If there are signs of text editing, mismatched fonts, altered numbers, or photo insertion, assign a high risk_score and verdict FAKE or SUSPICIOUS.
+    - If EXIF warnings indicate image editing software (Photoshop, Canva, GIMP, etc.), factor this heavily into the risk score (+30 to +50 points).
+    - risk_score: 0-24 → GENUINE, 25-59 → SUSPICIOUS, 60-100 → FAKE.
     """
 
 
 CANDIDATE_MODELS = [
+    "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
 ]
 
 
@@ -144,61 +162,118 @@ def _safe_int(val: Any, default: int = 50) -> int:
     return default
 
 
-def generate_local_forensic_report(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
+def generate_local_forensic_report(
+    image_bytes: bytes, 
+    document_type: str, 
+    exif_flags: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
-    High-precision local computer vision fallback analysis.
-    Executes if Gemini API is delayed, timed out, or rate-limited.
+    High-precision local computer vision & ELA forensic analysis engine.
+    Executes Error Level Analysis (ELA), EXIF software detection, aspect ratio validation,
+    header color palette verification, and face boundary insertion analysis.
     """
+    anomalies = []
+    tampered_regions = []
+    risk_score = 0
+
+    # 1. EXIF Metadata Forensic Penalties
+    if exif_flags:
+        for flag in exif_flags:
+            flag_lower = flag.lower()
+            if any(sw in flag_lower for sw in ["photoshop", "canva", "gimp", "pixlr", "paint.net", "edited with"]):
+                anomalies.append({
+                    "type": "Metadata",
+                    "description": f"EXIF metadata indicates file was processed with editing software: {flag}",
+                    "severity": "HIGH"
+                })
+                risk_score += 45
+            elif "missing" in flag_lower or "no exif" in flag_lower:
+                anomalies.append({
+                    "type": "Metadata",
+                    "description": flag,
+                    "severity": "LOW"
+                })
+                risk_score += 15
+            elif "date" in flag_lower:
+                anomalies.append({
+                    "type": "Metadata",
+                    "description": flag,
+                    "severity": "MEDIUM"
+                })
+                risk_score += 15
+
+    # 2. Error Level Analysis (ELA)
+    ela_res = perform_ela_analysis(image_bytes, quality=90)
+    if ela_res.get("ela_score", 0) > 0:
+        risk_score += ela_res["ela_score"]
+        tampered_regions.extend(ela_res.get("tampered_regions", []))
+        anomalies.extend(ela_res.get("anomalies", []))
+
+    # 3. Document Layout, Aspect Ratio & Face Insertion Analysis
+    layout_score, layout_anomalies, layout_regions = analyze_document_layout_and_face(image_bytes, document_type)
+    if layout_score > 0:
+        risk_score += layout_score
+        anomalies.extend(layout_anomalies)
+        tampered_regions.extend(layout_regions)
+
+    # 4. Noise Variance Analysis
+    noise_res = analyze_regional_noise(image_bytes)
+    if noise_res.get("noise_score", 0) > 0:
+        risk_score += noise_res["noise_score"]
+        anomalies.extend(noise_res.get("anomalies", []))
+
+    # 5. Laplacian Blur / Contrast Check
     try:
-        img_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        w, h = img_pil.size
-        img_np = np.array(img_pil)
-        gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        
-        # Calculate sharpness / blur via Laplacian variance
-        laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-        
-        anomalies = []
-        tampered_regions = []
-        risk_score = 12
-
-        if laplacian_var < 40:
-            anomalies.append({
-                "type": "ImageQuality",
-                "description": "Image shows noticeable blur or heavy JPEG compression artifacts.",
-                "severity": "LOW"
-            })
-            risk_score += 15
-
-        verdict = "GENUINE"
-        if risk_score > 60:
-            verdict = "FAKE"
-        elif risk_score > 25:
-            verdict = "SUSPICIOUS"
-
-        return {
-            "risk_score": risk_score,
-            "verdict": verdict,
-            "confidence": 88,
-            "anomalies": anomalies,
-            "tampered_regions": tampered_regions,
-            "summary": f"Forensic analysis completed for {document_type.upper()}. Alignment, text clarity, and structural security signatures verified."
-        }
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img_gray = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        if img_gray is not None:
+            lap_var = cv2.Laplacian(img_gray, cv2.CV_64F).var()
+            if lap_var < 30:
+                anomalies.append({
+                    "type": "ImageQuality",
+                    "description": "Severe blur or heavy compression artifacts detected across document.",
+                    "severity": "LOW"
+                })
+                risk_score += 15
     except Exception:
-        return {
-            "risk_score": 10,
-            "verdict": "GENUINE",
-            "confidence": 85,
-            "anomalies": [],
-            "tampered_regions": [],
-            "summary": f"Forensic document verification complete for {document_type.upper()}."
-        }
+        pass
+
+    # Ensure bounds
+    risk_score = max(0, min(100, risk_score))
+
+    if risk_score >= 60:
+        verdict = "FAKE"
+    elif risk_score >= 25:
+        verdict = "SUSPICIOUS"
+    else:
+        verdict = "GENUINE"
+        if risk_score == 0:
+            risk_score = 12
+
+    summary = (
+        f"Local forensic computer vision scan completed for {document_type.upper()}. "
+        f"Analyzed JPEG Error Level Analysis (ELA), layout structure, face boundary insertion, and EXIF flags. "
+        f"Detected {len(anomalies)} anomaly indicator(s)."
+    )
+
+    return {
+        "risk_score": risk_score,
+        "verdict": verdict,
+        "confidence": 88 if verdict != "GENUINE" else 92,
+        "anomalies": anomalies,
+        "tampered_regions": tampered_regions,
+        "summary": summary
+    }
 
 
-def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
+def analyze_document(
+    image_bytes: bytes, 
+    document_type: str, 
+    exif_flags: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
     Send the document image to Gemini Vision API for forensic analysis.
-    Falls back gracefully to local forensic engine if cloud API is delayed.
+    Falls back gracefully to multi-signal local computer vision engine if cloud API is delayed.
     """
     api_key = (
         os.getenv("GEMINI_API_KEY") or 
@@ -207,14 +282,13 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
     ).strip().strip('"').strip("'")
 
     if not api_key or api_key == "your_gemini_api_key_here":
-        logger.warning("GEMINI_API_KEY not configured. Using local computer vision engine.")
-        return generate_local_forensic_report(image_bytes, document_type)
+        logger.warning("GEMINI_API_KEY not configured. Using local computer vision forensic engine.")
+        return generate_local_forensic_report(image_bytes, document_type, exif_flags)
 
     try:
-        # Initialize client with a strict 10s timeout to prevent Render 504 Gateway Timeouts
-        client = genai.Client(api_key=api_key, http_options={"timeout": 10000})
+        client = genai.Client(api_key=api_key, http_options={"timeout": 30000})
 
-        prompt = build_prompt(document_type)
+        prompt = build_prompt(document_type, exif_flags)
         image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
         response = None
@@ -239,30 +313,38 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
 
         if not response or not response.text:
             logger.warning("All cloud models timed out/failed. Switching to local vision engine.")
-            return generate_local_forensic_report(image_bytes, document_type)
+            return generate_local_forensic_report(image_bytes, document_type, exif_flags)
 
         raw_text = response.text.strip()
         logger.info(f"Gemini raw response: {raw_text[:200]}...")
 
         # Extract JSON robustly
+        cleaned_text = re.sub(r"^```json\s*", "", raw_text, flags=re.IGNORECASE)
+        cleaned_text = re.sub(r"\s*```$", "", cleaned_text).strip()
+        cleaned_text = re.sub(r",\s*([\]}])", r"\1", cleaned_text) # strip trailing commas
+
         try:
-            result = json.loads(raw_text)
+            result = json.loads(cleaned_text, strict=False)
         except Exception:
-            json_match = re.search(r"\{[\s\S]*\}", raw_text)
+            json_match = re.search(r"\{[\s\S]*\}", cleaned_text)
             if json_match:
-                result = json.loads(json_match.group())
+                try:
+                    match_str = re.sub(r",\s*([\]}])", r"\1", json_match.group())
+                    result = json.loads(match_str, strict=False)
+                except Exception:
+                    return generate_local_forensic_report(image_bytes, document_type, exif_flags)
             else:
-                return generate_local_forensic_report(image_bytes, document_type)
+                return generate_local_forensic_report(image_bytes, document_type, exif_flags)
 
         # Validate and sanitize fields safely
         result["risk_score"] = _safe_int(result.get("risk_score"), 50)
         result["confidence"] = _safe_int(result.get("confidence"), 80)
 
         v = str(result.get("verdict", "SUSPICIOUS")).upper()
-        if "GENUINE" in v:
-            result["verdict"] = "GENUINE"
-        elif "FAKE" in v:
+        if "FAKE" in v:
             result["verdict"] = "FAKE"
+        elif "GENUINE" in v:
+            result["verdict"] = "GENUINE"
         else:
             result["verdict"] = "SUSPICIOUS"
 
@@ -270,8 +352,42 @@ def analyze_document(image_bytes: bytes, document_type: str) -> Dict[str, Any]:
         result.setdefault("tampered_regions", [])
         result.setdefault("summary", "Document screening analysis completed.")
 
+        # Post-process: Cross-check local CV layout & face insertion flags
+        l_score, l_anomalies, l_regions = analyze_document_layout_and_face(image_bytes, document_type)
+        if l_score > 0:
+            for la in l_anomalies:
+                if not any(la["type"] in a.get("type", "") for a in result["anomalies"]):
+                    result["anomalies"].append(la)
+            for lr in l_regions:
+                if not any(lr["label"] in r.get("label", "") for r in result["tampered_regions"]):
+                    result["tampered_regions"].append(lr)
+            if l_score >= 30 and result["risk_score"] < 50:
+                result["risk_score"] = min(100, result["risk_score"] + l_score)
+                if result["risk_score"] >= 60:
+                    result["verdict"] = "FAKE"
+                elif result["risk_score"] >= 25:
+                    result["verdict"] = "SUSPICIOUS"
+
+        # Post-process: factor EXIF software warnings if Gemini didn't catch them
+        if exif_flags:
+            for flag in exif_flags:
+                if any(sw in flag.lower() for sw in ["photoshop", "canva", "gimp", "pixlr", "paint.net", "edited with"]):
+                    # Add anomaly if missing
+                    if not any("Metadata" in a.get("type", "") or "software" in a.get("description", "").lower() for a in result["anomalies"]):
+                        result["anomalies"].append({
+                            "type": "Metadata",
+                            "description": f"EXIF metadata indicates file was processed with editing software: {flag}",
+                            "severity": "HIGH"
+                        })
+                    if result["risk_score"] < 60:
+                        result["risk_score"] = min(100, result["risk_score"] + 40)
+                        if result["risk_score"] >= 60:
+                            result["verdict"] = "FAKE"
+                        elif result["risk_score"] >= 25:
+                            result["verdict"] = "SUSPICIOUS"
+
         return result
 
     except Exception as ex:
         logger.warning(f"Gemini API execution error: {ex}. Using local forensic engine.")
-        return generate_local_forensic_report(image_bytes, document_type)
+        return generate_local_forensic_report(image_bytes, document_type, exif_flags)

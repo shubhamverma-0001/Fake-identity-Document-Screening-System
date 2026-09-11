@@ -19,9 +19,12 @@ dist/
 *.spec
 uploads/
 scratch/
+audit_log.json
+backend/audit_log.json
 
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+

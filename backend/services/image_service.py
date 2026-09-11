@@ -244,38 +244,48 @@ def analyze_document_layout_and_face(image_bytes: bytes, document_type: str) -> 
         # 3. Face Detection & Portrait Photo Insertion Analysis
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        face_cascade = cv2.CascadeClassifier(cascade_path)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
+        if not os.path.exists(cascade_path):
+            import site
+            for sp in site.getsitepackages():
+                candidate = os.path.join(sp, "cv2", "data", "haarcascade_frontalface_default.xml")
+                if os.path.exists(candidate):
+                    cascade_path = candidate
+                    break
 
-        if len(faces) > 0:
-            for (fx, fy, fw, fh) in faces:
-                x_pct = (fx / w) * 100
-                y_pct = (fy / h) * 100
-                w_pct = (fw / w) * 100
-                h_pct = (fh / h) * 100
+        if os.path.exists(cascade_path):
+            face_cascade = cv2.CascadeClassifier(cascade_path)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
 
-                y1, y2 = max(0, fy - 5), min(h, fy + fh + 5)
-                x1, x2 = max(0, fx - 5), min(w, fx + fw + 5)
-                face_roi = gray[y1:y2, x1:x2]
-                if face_roi.size > 0:
-                    lap_face = cv2.Laplacian(face_roi, cv2.CV_64F).var()
-                    if lap_face > 1000:
-                        score += 25
-                        anomalies.append({
-                            "type": "Photo",
-                            "description": "High digital contrast/edge variance detected around portrait photo region (indicative of inserted photo).",
-                            "severity": "HIGH"
-                        })
-                        tampered_regions.append({
-                            "label": "Inserted Portrait Photo",
-                            "x": round(x_pct, 1),
-                            "y": round(y_pct, 1),
-                            "w": round(w_pct, 1),
-                            "h": round(h_pct, 1)
-                        })
+            if len(faces) > 0:
+                for (fx, fy, fw, fh) in faces:
+                    x_pct = (fx / w) * 100
+                    y_pct = (fy / h) * 100
+                    w_pct = (fw / w) * 100
+                    h_pct = (fh / h) * 100
+
+                    y1, y2 = max(0, fy - 5), min(h, fy + fh + 5)
+                    x1, x2 = max(0, fx - 5), min(w, fx + fw + 5)
+                    face_roi = gray[y1:y2, x1:x2]
+                    if face_roi.size > 0:
+                        lap_face = cv2.Laplacian(face_roi, cv2.CV_64F).var()
+                        if lap_face > 800:
+                            score += 25
+                            anomalies.append({
+                                "type": "Photo",
+                                "description": "High digital contrast/edge variance detected around portrait photo region (indicative of inserted photo).",
+                                "severity": "HIGH"
+                            })
+                            tampered_regions.append({
+                                "label": "Inserted Portrait Photo",
+                                "x": round(x_pct, 1),
+                                "y": round(y_pct, 1),
+                                "w": round(w_pct, 1),
+                                "h": round(h_pct, 1)
+                            })
 
     except Exception:
         pass
+
 
     return score, anomalies, tampered_regions
 

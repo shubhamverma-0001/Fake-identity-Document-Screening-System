@@ -59,7 +59,9 @@ DOC_HINTS = {
         "1. Valid Driving License Number format (2-letter State Code + 2-digit RTO Code + 4-digit Year + 7 digits, e.g., DL-0420110012345, MH12 20180012345, KA01 20200001234). "
         "2. State Transport Department Emblem/Logo. "
         "3. License holder photo, Name, DOB, Blood Group, Vehicle Categories (LMV, MCWG), Issue & Expiry Dates. "
-        "FORENSIC CHECK FOR DRIVING LICENSES: Thoroughly inspect the DL for altered text fields, edited names/numbers, mismatched fonts, white/grey paint boxes over original text, or photo cutouts. If ANY field is altered, set verdict FAKE."
+        "FORENSIC CHECK FOR DRIVING LICENSES: Perform hyper-vigilant character-level inspection of all text fields. "
+        "Check if Name, License Number, DOB, Expiry Date, or Address show mismatched typography, different font families, uneven character sizes, digital font overlays, white/grey background paint patches, smudged pixels, or pasted photo cutouts. "
+        "If ANY text field or number is digitally altered, re-typed, or pasted, YOU MUST assign verdict `FAKE` (risk_score 75 to 100) and pinpoint tampered_regions."
     ),
     "other": (
         "This is an official government identity document. Analyze it for any signs of "
@@ -322,19 +324,21 @@ def analyze_document(
 
         # Post-process: Include localized ELA anomalies if detected by computer vision
         ela_res = perform_ela_analysis(image_bytes, quality=90)
-        if ela_res.get("ela_score", 0) >= 45:
+        if ela_res.get("ela_score", 0) >= 35:
             for r in ela_res.get("tampered_regions", []):
                 if not any(r["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
                     result["tampered_regions"].append(r)
             for a in ela_res.get("anomalies", []):
                 if not any(a["type"] in an.get("type", "") for an in result["anomalies"]):
                     result["anomalies"].append(a)
-            # Only escalate if Gemini did NOT explicitly declare document GENUINE or if ELA is extremely high (>60)
-            if result["verdict"] != "GENUINE" or ela_res.get("ela_score", 0) >= 60:
+
+            # ELA compression disparity indicates localized image/text editing
+            if ela_res.get("ela_score", 0) >= 50:
                 result["risk_score"] = min(100, max(result["risk_score"], ela_res["ela_score"]))
-                if result["risk_score"] >= 60:
-                    result["verdict"] = "FAKE"
-                elif result["risk_score"] >= 25:
+                result["verdict"] = "FAKE"
+            elif ela_res.get("ela_score", 0) >= 35:
+                result["risk_score"] = min(100, max(result["risk_score"], 40))
+                if result["verdict"] == "GENUINE":
                     result["verdict"] = "SUSPICIOUS"
 
         # Post-process EXIF software warnings if present

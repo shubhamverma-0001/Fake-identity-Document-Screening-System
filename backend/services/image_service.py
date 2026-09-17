@@ -90,8 +90,8 @@ def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any
         anomalies = []
         ela_score = 0
 
-        # Divide into grid to find localized anomalies
-        grid_rows, grid_cols = 8, 8
+        # Divide into 12x12 grid to find localized text/photo editing anomalies
+        grid_rows, grid_cols = 12, 12
         cell_h, cell_w = h / grid_rows, w / grid_cols
 
         cell_means = []
@@ -111,7 +111,7 @@ def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any
 
         # Outlier grid cells: detect localized re-compression anomalies from edited/pasted elements
         for r, c, x1, y1, cw, ch, c_mean in cells_info:
-            if overall_cell_std > 0.15 and (c_mean - overall_cell_mean) > (1.5 * overall_cell_std) and c_mean > 2.0:
+            if overall_cell_std > 0.25 and (c_mean - overall_cell_mean) > (2.0 * overall_cell_std) and c_mean > 3.8:
                 x_pct = round((x1 / w) * 100, 1)
                 y_pct = round((y1 / h) * 100, 1)
                 w_pct = round((cw / w) * 100, 1)
@@ -126,19 +126,15 @@ def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any
                 })
 
         if len(tampered_regions) >= 2:
-            ela_score = min(75, 25 + len(tampered_regions) * 15)
+            ela_score = min(85, 35 + len(tampered_regions) * 10)
             anomalies.append({
                 "type": "Manipulation",
                 "description": f"Error Level Analysis (ELA) detected {len(tampered_regions)} region(s) with localized compression disparity typical of digital editing.",
                 "severity": "HIGH"
             })
         elif len(tampered_regions) == 1:
-            ela_score = 30
-            anomalies.append({
-                "type": "Manipulation",
-                "description": "Minor localized compression disparity detected in document image.",
-                "severity": "MEDIUM"
-            })
+            ela_score = 0  # Ignore single isolated cell noise on high-contrast text lines
+            tampered_regions.clear()
 
         return {
             "ela_score": ela_score,

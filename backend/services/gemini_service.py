@@ -55,9 +55,11 @@ DOC_HINTS = {
         "the Income Tax Department logo, the holder's photo and signature, name, father's name, and date of birth."
     ),
     "driving_license": (
-        "This is an Indian Driving License. It should have: the transport department logo, "
-        "license number, holder's photo, name, address, DOB, blood group, "
-        "vehicle categories, and validity dates."
+        "This is an Indian Driving License. It MUST have: "
+        "1. Valid Driving License Number format (2-letter State Code + 2-digit RTO Code + 4-digit Year + 7 digits, e.g., DL-0420110012345, MH12 20180012345, KA01 20200001234). "
+        "2. State Transport Department Emblem/Logo. "
+        "3. License holder photo, Name, DOB, Blood Group, Vehicle Categories (LMV, MCWG), Issue & Expiry Dates. "
+        "FORENSIC CHECK FOR DRIVING LICENSES: Thoroughly inspect the DL for altered text fields, edited names/numbers, mismatched fonts, white/grey paint boxes over original text, or photo cutouts. If ANY field is altered, set verdict FAKE."
     ),
     "other": (
         "This is an official government identity document. Analyze it for any signs of "
@@ -84,12 +86,13 @@ Document Context: {hint}
 {exif_text}
 
 MANDATORY FORENSIC ANALYSIS RULES:
-1. **Detecting Forgeries**:
-   - Inspect the document for fake/altered text, mismatched font styles, edited ID numbers, inconsistent character spacing, clone stamp artifacts, pasted photo cutouts, or fake templates.
+1. **Detecting Forgeries & Alterations**:
+   - Inspect the document for fake/altered text, mismatched font styles, edited ID numbers, inconsistent character spacing, clone stamp artifacts, painted-over text boxes, pasted photo cutouts, or fake templates.
+   - For Driving Licenses: Cross-check the Driving License Number format (e.g. DL-0420110012345). Verify if Name, License Number, DOB, or Expiry Dates show font mismatches or image editing artifacts.
    - If ANY text fields are altered, fonts are mismatched, digits are edited, or the face photo is pasted, you MUST assign verdict `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) and list the exact tampered_regions with percentages [x, y, w, h].
 
 2. **Detecting Genuine Documents**:
-   - If the document is an authentic government-issued identity card (Aadhaar, PAN, Passport, DL) with consistent typography, valid ID formatting, clean security emblems, and NO signs of text alteration or photo manipulation, assign verdict `GENUINE` (risk_score 0 to 15).
+   - If the document is an authentic government-issued identity card with consistent typography, valid ID formatting, clean security emblems, and NO signs of text alteration or photo manipulation, assign verdict `GENUINE` (risk_score 0 to 15).
 
 Respond ONLY with a valid JSON object (no markdown explanation outside JSON):
 
@@ -179,7 +182,7 @@ def generate_local_forensic_report(
         tampered_regions.extend(ela_res.get("tampered_regions", []))
         anomalies.extend(ela_res.get("anomalies", []))
 
-    # 3. Document Layout & Aspect Ratio
+    # 3. Document Layout & Aspect Ratio & Text Patch Analysis
     layout_score, layout_anomalies, layout_regions = analyze_document_layout_and_face(image_bytes, document_type)
     if layout_score > 0:
         risk_score += layout_score
@@ -306,6 +309,22 @@ def analyze_document(
         result.setdefault("anomalies", [])
         result.setdefault("tampered_regions", [])
         result.setdefault("summary", "Document screening analysis completed.")
+
+        # Post-process: Cross-check local CV layout & painted text patch anomalies
+        l_score, l_anomalies, l_regions = analyze_document_layout_and_face(image_bytes, document_type)
+        if l_score > 0:
+            for la in l_anomalies:
+                if not any(la["type"] in a.get("type", "") for a in result["anomalies"]):
+                    result["anomalies"].append(la)
+            for lr in l_regions:
+                if not any(lr["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
+                    result["tampered_regions"].append(lr)
+            if l_score >= 25 and result["risk_score"] < 50:
+                result["risk_score"] = min(100, result["risk_score"] + l_score)
+                if result["risk_score"] >= 60:
+                    result["verdict"] = "FAKE"
+                elif result["risk_score"] >= 25:
+                    result["verdict"] = "SUSPICIOUS"
 
         # Post-process: Include localized ELA anomalies if detected by computer vision
         ela_res = perform_ela_analysis(image_bytes, quality=90)

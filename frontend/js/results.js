@@ -28,6 +28,7 @@ function renderReport(r) {
   renderGauge(r.risk_score);
   renderMetaInfo(r);
   renderImages(r);
+  renderFaceVerification(r.face_verification);
   renderAnomalies(r.anomalies || []);
   renderExifFlags(r.exif_flags || []);
   renderSummary(r.summary);
@@ -134,6 +135,66 @@ function renderImages(r) {
     noAnnot.style.display = 'flex';
     if (annotImg) annotImg.style.display = 'none';
   }
+}
+
+/* ─────────────────────────────── Face Verification ── */
+function renderFaceVerification(fv) {
+  const card = document.getElementById('face-verification-card');
+  if (!card) return;
+
+  if (!fv) {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+
+  // Crop images
+  const docImg = document.getElementById('face-doc-img');
+  const liveImg = document.getElementById('face-live-img');
+  if (docImg && fv.doc_face_b64) docImg.src = `data:image/jpeg;base64,${fv.doc_face_b64}`;
+  if (liveImg && fv.live_face_b64) liveImg.src = `data:image/jpeg;base64,${fv.live_face_b64}`;
+
+  // Summary text
+  const summaryEl = document.getElementById('face-summary-text');
+  if (summaryEl) summaryEl.textContent = fv.summary || 'Face verification completed.';
+
+  // Match score & verdict
+  const matchScoreEl = document.getElementById('face-match-score-text');
+  const matchBarFill = document.getElementById('face-match-bar-fill');
+  const matchBadge   = document.getElementById('face-match-verdict-badge');
+  const matchDetails = document.getElementById('face-match-details');
+
+  const matchScore = fv.match_score ?? 0;
+  if (matchScoreEl) matchScoreEl.textContent = `${matchScore}%`;
+  if (matchBarFill) {
+    matchBarFill.style.width = `${matchScore}%`;
+    matchBarFill.style.background = matchScore >= 70 ? 'var(--genuine)' : matchScore >= 45 ? 'var(--suspicious)' : 'var(--fake)';
+  }
+  if (matchBadge) {
+    matchBadge.textContent = fv.match_verdict || 'MATCH';
+    matchBadge.className = `badge badge-${fv.match_verdict === 'MATCH' ? 'genuine' : fv.match_verdict === 'SUSPICIOUS' ? 'suspicious' : 'fake'}`;
+  }
+  if (matchDetails) matchDetails.textContent = fv.match_details || 'Facial feature comparison completed.';
+
+  // Liveness score & verdict
+  const livenessScoreEl = document.getElementById('face-liveness-score-text');
+  const livenessBarFill = document.getElementById('face-liveness-bar-fill');
+  const livenessBadge   = document.getElementById('face-liveness-verdict-badge');
+  const livenessDetails = document.getElementById('face-liveness-details');
+
+  const livenessScore = fv.liveness_score ?? 0;
+  if (livenessScoreEl) livenessScoreEl.textContent = `${livenessScore}%`;
+  if (livenessBarFill) {
+    livenessBarFill.style.width = `${livenessScore}%`;
+    livenessBarFill.style.background = livenessScore >= 60 ? 'var(--genuine)' : 'var(--fake)';
+  }
+  if (livenessBadge) {
+    const isLive = fv.is_live ?? (livenessScore >= 60);
+    livenessBadge.textContent = isLive ? 'REAL PERSON' : 'SPOOF ATTEMPT';
+    livenessBadge.className = `badge badge-${isLive ? 'genuine' : 'fake'}`;
+  }
+  if (livenessDetails) livenessDetails.textContent = fv.liveness_details || 'Anti-spoofing check completed.';
 }
 
 /* ─────────────────────────────── Anomalies ── */

@@ -2,17 +2,30 @@
 
 let selectedFile = null;
 let selectedDocType = 'aadhaar';
+let liveSelfieBlob = null;
+let webcamStream = null;
 
 /* ── DOM refs ── */
-const dropZone     = document.getElementById('drop-zone');
-const fileInput    = document.getElementById('file-input');
-const previewWrap  = document.getElementById('upload-preview');
-const previewImg   = document.getElementById('preview-img');
-const previewName  = document.getElementById('preview-name');
-const previewSize  = document.getElementById('preview-size');
-const analyzeBtn   = document.getElementById('analyze-btn');
-const loadingOvl   = document.getElementById('loading-overlay');
-const docTypeBtns  = document.querySelectorAll('.doc-type-btn');
+const dropZone           = document.getElementById('drop-zone');
+const fileInput          = document.getElementById('file-input');
+const previewWrap        = document.getElementById('upload-preview');
+const previewImg         = document.getElementById('preview-img');
+const previewName        = document.getElementById('preview-name');
+const previewSize        = document.getElementById('preview-size');
+const analyzeBtn         = document.getElementById('analyze-btn');
+const loadingOvl         = document.getElementById('loading-overlay');
+const docTypeBtns        = document.querySelectorAll('.doc-type-btn');
+
+/* Webcam DOM refs */
+const cameraContainer    = document.getElementById('camera-container');
+const webcamVideo        = document.getElementById('webcam-video');
+const webcamCanvas       = document.getElementById('webcam-canvas');
+const selfiePreviewWrap  = document.getElementById('selfie-preview-container');
+const selfiePreviewImg   = document.getElementById('selfie-preview-img');
+const startCameraBtn     = document.getElementById('start-camera-btn');
+const captureSelfieBtn   = document.getElementById('capture-selfie-btn');
+const retakeSelfieBtn    = document.getElementById('retake-selfie-btn');
+const selfieFileInput    = document.getElementById('selfie-file-input');
 
 /* ─────────────────────────────── File Selection ── */
 
@@ -68,13 +81,94 @@ docTypeBtns.forEach(btn => {
 /* Set aadhaar as default selected */
 document.querySelector('[data-type="aadhaar"]')?.classList.add('selected');
 
+/* ─────────────────────────────── Webcam & Selfie Logic ── */
+
+async function startCamera() {
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+    });
+    webcamVideo.srcObject = webcamStream;
+    cameraContainer.style.display = 'block';
+    selfiePreviewWrap.style.display = 'none';
+    startCameraBtn.style.display = 'none';
+    captureSelfieBtn.style.display = 'inline-flex';
+    retakeSelfieBtn.style.display = 'none';
+    showToast('Camera started. Align your face in the oval frame.', 'info');
+  } catch (err) {
+    console.error('Camera access error:', err);
+    showToast('Could not access camera. Please allow camera permissions or upload a selfie file.', 'error');
+  }
+}
+
+function stopCamera() {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach(track => track.stop());
+    webcamStream = null;
+  }
+  cameraContainer.style.display = 'none';
+}
+
+captureSelfieBtn?.addEventListener('click', () => {
+  if (!webcamVideo.videoWidth) return;
+
+  webcamCanvas.width = webcamVideo.videoWidth;
+  webcamCanvas.height = webcamVideo.videoHeight;
+  const ctx = webcamCanvas.getContext('2d');
+  
+  // Mirror canvas horizontally to match mirrored video feed
+  ctx.translate(webcamCanvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(webcamVideo, 0, 0, webcamCanvas.width, webcamCanvas.height);
+
+  webcamCanvas.toBlob((blob) => {
+    if (!blob) return;
+    liveSelfieBlob = blob;
+    const url = URL.createObjectURL(blob);
+    selfiePreviewImg.src = url;
+
+    stopCamera();
+    selfiePreviewWrap.style.display = 'block';
+    captureSelfieBtn.style.display = 'none';
+    retakeSelfieBtn.style.display = 'inline-flex';
+    startCameraBtn.style.display = 'none';
+    showToast('Live selfie captured! Ready for verification.', 'success');
+  }, 'image/jpeg', 0.92);
+});
+
+startCameraBtn?.addEventListener('click', () => startCamera());
+
+retakeSelfieBtn?.addEventListener('click', () => {
+  liveSelfieBlob = null;
+  selfiePreviewWrap.style.display = 'none';
+  startCamera();
+});
+
+selfieFileInput?.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('image/')) {
+    showToast('Please select a valid image file for selfie.', 'error');
+    return;
+  }
+  liveSelfieBlob = file;
+  const url = URL.createObjectURL(file);
+  selfiePreviewImg.src = url;
+
+  stopCamera();
+  selfiePreviewWrap.style.display = 'block';
+  startCameraBtn.style.display = 'none';
+  captureSelfieBtn.style.display = 'none';
+  retakeSelfieBtn.style.display = 'inline-flex';
+  showToast('Selfie image loaded.', 'success');
+});
+
 /* ─────────────────────────────── Loading Steps Animation ── */
 
 const LOADING_STEPS = [
-  { id: 'step-upload',    label: 'Uploading document securely…' },
+  { id: 'step-upload',    label: 'Uploading document & live selfie securely…' },
   { id: 'step-exif',     label: 'Extracting EXIF metadata…' },
-  { id: 'step-preproc',  label: 'Preprocessing image…' },
-  { id: 'step-ai',       label: 'Running Gemini Vision AI analysis…' },
+  { id: 'step-preproc',  label: 'Preprocessing images & running face detection…' },
+  { id: 'step-ai',       label: 'Running Gemini Vision AI forensic & face verification…' },
   { id: 'step-annotate', label: 'Generating annotated report…' },
 ];
 
@@ -108,6 +202,9 @@ analyzeBtn.addEventListener('click', async () => {
     return;
   }
 
+  // Stop camera stream if running
+  stopCamera();
+
   // Show loading overlay
   loadingOvl.classList.add('visible');
   analyzeBtn.disabled = true;
@@ -126,6 +223,10 @@ analyzeBtn.addEventListener('click', async () => {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('document_type', selectedDocType);
+
+    if (liveSelfieBlob) {
+      formData.append('live_file', liveSelfieBlob, 'selfie.jpg');
+    }
 
     const response = await fetch(`${API_BASE}/api/screen`, {
       method: 'POST',

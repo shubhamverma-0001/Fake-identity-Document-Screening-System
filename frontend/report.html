@@ -208,6 +208,66 @@
         </div>
       </div>
 
+      <!-- Face Liveness & Identity Verification Card -->
+      <div class="card fade-in mb-6" id="face-verification-card" style="display:none">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">👤</span> Face Liveness & Biometric Identity Verification</div>
+          <span style="font-size:12px;color:var(--text-muted)" id="face-summary-badge">Live Anti-Spoofing & Biometric Face Match</span>
+        </div>
+
+        <div class="grid-2" style="align-items:stretch;gap:20px">
+          <!-- Left: Face Photo Comparison -->
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="image-panel" style="text-align:center;padding:12px">
+                <div class="image-panel-header" style="font-size:12px;margin-bottom:8px">🪪 Document Face Photo</div>
+                <img id="face-doc-img" alt="Document Face Photo" style="width:100%;max-height:180px;object-fit:cover;border-radius:var(--radius-sm);background:#111">
+              </div>
+              <div class="image-panel" style="text-align:center;padding:12px">
+                <div class="image-panel-header" style="font-size:12px;margin-bottom:8px">📸 Live Selfie Capture</div>
+                <img id="face-live-img" alt="Live Selfie Capture" style="width:100%;max-height:180px;object-fit:cover;border-radius:var(--radius-sm);background:#111">
+              </div>
+            </div>
+            <div id="face-summary-text" style="font-size:13px;color:var(--text-secondary);line-height:1.6;background:var(--bg-glass);padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+              —
+            </div>
+          </div>
+
+          <!-- Right: Biometric & Liveness Scores -->
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <!-- Identity Match Gauge / Bar -->
+            <div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">Biometric Identity Match</span>
+                <span id="face-match-verdict-badge" class="badge">MATCH</span>
+              </div>
+              <div style="font-size:24px;font-weight:700;color:var(--accent-light)" id="face-match-score-text">0%</div>
+              <div class="risk-bar-bg" style="height:8px;margin-top:6px">
+                <div id="face-match-bar-fill" class="risk-bar-fill" style="width:0%;height:100%;background:var(--genuine)"></div>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:8px" id="face-match-details">
+                —
+              </div>
+            </div>
+
+            <!-- Liveness & Anti-Spoofing Bar -->
+            <div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">Liveness & Anti-Spoofing</span>
+                <span id="face-liveness-verdict-badge" class="badge">REAL PERSON</span>
+              </div>
+              <div style="font-size:24px;font-weight:700;color:var(--genuine)" id="face-liveness-score-text">0%</div>
+              <div class="risk-bar-bg" style="height:8px;margin-top:6px">
+                <div id="face-liveness-bar-fill" class="risk-bar-fill" style="width:0%;height:100%;background:var(--genuine)"></div>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:8px" id="face-liveness-details">
+                —
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- AI Summary + EXIF Flags -->
       <div class="grid-2 mb-6">
 

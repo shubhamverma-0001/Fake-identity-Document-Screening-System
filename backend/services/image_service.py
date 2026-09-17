@@ -116,9 +116,9 @@ def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any
         overall_cell_mean = np.mean(cell_means)
         overall_cell_std = np.std(cell_means)
 
-        # Outlier grid cells: requires severe variance disparity (pasted digital elements)
+        # Outlier grid cells: detect localized re-compression anomalies from edited/pasted elements
         for r, c, x1, y1, cw, ch, c_mean in cells_info:
-            if overall_cell_std > 3.0 and (c_mean - overall_cell_mean) > (3.5 * overall_cell_std) and c_mean > 35.0:
+            if overall_cell_std > 0.15 and (c_mean - overall_cell_mean) > (1.5 * overall_cell_std) and c_mean > 2.0:
                 x_pct = round((x1 / w) * 100, 1)
                 y_pct = round((y1 / h) * 100, 1)
                 w_pct = round((cw / w) * 100, 1)
@@ -132,19 +132,19 @@ def perform_ela_analysis(image_bytes: bytes, quality: int = 90) -> Dict[str, Any
                     "h": h_pct,
                 })
 
-        if len(tampered_regions) >= 3:
-            ela_score = min(65, 25 + len(tampered_regions) * 10)
+        if len(tampered_regions) >= 2:
+            ela_score = min(75, 25 + len(tampered_regions) * 15)
             anomalies.append({
                 "type": "Manipulation",
-                "description": f"Error Level Analysis (ELA) detected {len(tampered_regions)} region(s) with high compression disparity.",
+                "description": f"Error Level Analysis (ELA) detected {len(tampered_regions)} region(s) with localized compression disparity typical of digital editing.",
                 "severity": "HIGH"
             })
-        elif len(tampered_regions) > 0:
-            ela_score = 20
+        elif len(tampered_regions) == 1:
+            ela_score = 30
             anomalies.append({
                 "type": "Manipulation",
-                "description": f"Minor Error Level Analysis (ELA) localized compression variance detected.",
-                "severity": "LOW"
+                "description": "Minor localized compression disparity detected in document image.",
+                "severity": "MEDIUM"
             })
 
         return {

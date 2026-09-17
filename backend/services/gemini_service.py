@@ -73,7 +73,6 @@ def build_prompt(document_type: str, exif_flags: Optional[List[str]] = None) -> 
     hint = DOC_HINTS.get(document_type.lower(), DOC_HINTS["other"])
     exif_text = ""
     if exif_flags:
-        # Only pass explicit software flags to AI prompt
         sw_flags = [f for f in exif_flags if any(s in f.lower() for s in ["photoshop", "gimp", "canva", "pixlr", "edited"])]
         if sw_flags:
             exif_text = "\nEXIF Metadata Analysis Warnings:\n" + "\n".join([f"- {f}" for f in sw_flags])
@@ -84,26 +83,15 @@ detecting forged, edited, and tampered identity documents for law enforcement ag
 Document Context: {hint}
 {exif_text}
 
-CRITICAL ACCURACY DIRECTIVE:
-- Genuine identity documents (Aadhaar, PAN, Passport, Driving License, etc.) — whether photographed via mobile camera, scanned, or downloaded as e-card PDFs — naturally have sharp text, official emblems, and standard formatting.
-- If a document displays legitimate government layouts, consistent typography, and NO clear signs of text alteration (e.g. mismatched digits, erased names, pasted text boxes, or photo cutouts), you MUST classify it as GENUINE with a low risk_score (0 to 15).
-- DO NOT flag authentic documents as FAKE or SUSPICIOUS based on normal digital capture lighting, typical phone camera angles, or standard JPEG compression.
+MANDATORY FORENSIC ANALYSIS RULES:
+1. **Detecting Forgeries**:
+   - Inspect the document for fake/altered text, mismatched font styles, edited ID numbers, inconsistent character spacing, clone stamp artifacts, pasted photo cutouts, or fake templates.
+   - If ANY text fields are altered, fonts are mismatched, digits are edited, or the face photo is pasted, you MUST assign verdict `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) and list the exact tampered_regions with percentages [x, y, w, h].
 
-Carefully analyze this document image for genuine vs forged indicators:
+2. **Detecting Genuine Documents**:
+   - If the document is an authentic government-issued identity card (Aadhaar, PAN, Passport, DL) with consistent typography, valid ID formatting, clean security emblems, and NO signs of text alteration or photo manipulation, assign verdict `GENUINE` (risk_score 0 to 15).
 
-1. **Font Analysis & Text Alterations**: Look for inconsistent fonts, mixed typefaces, altered digits, 
-   incorrect character spacing, or pixelation halos around individual altered text fields.
-
-2. **Image Manipulation & Digital Editing**: Detect clone stamp artifacts, digital text pasting, 
-   mismatched compression artifacts in localized text areas, or blur/sharpen boundaries around photos.
-
-3. **Alignment & Layout**: Check for misaligned text, incorrect margins, skewed ID numbers, 
-   or off-center logos that deviate from standard templates.
-
-4. **Security Features & Photo Integrity**: Assess holograms, QR codes, government emblems, Ashoka Pillar, 
-   and verify if the face photo is authentic or a physically pasted cutout.
-
-Based on your analysis, respond ONLY with a valid JSON object (no markdown explanation outside JSON):
+Respond ONLY with a valid JSON object (no markdown explanation outside JSON):
 
 {{
   "risk_score": <integer 0-100, where 0=certainly genuine, 100=certainly fake>,
@@ -130,7 +118,7 @@ Based on your analysis, respond ONLY with a valid JSON object (no markdown expla
 
     Rules:
     - risk_score calibration: 0-24 → GENUINE, 25-59 → SUSPICIOUS, 60-100 → FAKE.
-    - Be rigorous yet accurate. Genuine identity documents MUST receive GENUINE verdict (risk_score 0-15).
+    - Be rigorous and objective. Fake/altered documents MUST be assigned FAKE (risk_score 65-100).
     """
 
 
@@ -182,7 +170,7 @@ def generate_local_forensic_report(
                     "description": f"EXIF metadata indicates file was processed with editing software: {flag}",
                     "severity": "HIGH"
                 })
-                risk_score += 35
+                risk_score += 45
 
     # 2. Error Level Analysis (ELA)
     ela_res = perform_ela_analysis(image_bytes, quality=90)
@@ -209,12 +197,10 @@ def generate_local_forensic_report(
 
     if risk_score >= 60:
         verdict = "FAKE"
-    elif risk_score >= 30:
+    elif risk_score >= 25:
         verdict = "SUSPICIOUS"
     else:
         verdict = "GENUINE"
-        if risk_score > 15 and len(anomalies) == 0:
-            risk_score = 10
 
     summary = (
         f"Local forensic computer vision scan completed for {document_type.upper()}. "
@@ -303,22 +289,39 @@ def analyze_document(
                 return generate_local_forensic_report(image_bytes, document_type, exif_flags)
 
         # Validate and sanitize fields safely
-        result["risk_score"] = _safe_int(result.get("risk_score"), 10)
-        result["confidence"] = _safe_int(result.get("confidence"), 90)
+        raw_score = _safe_int(result.get("risk_score"), 10)
+        v = str(result.get("verdict", "")).upper()
 
-        v = str(result.get("verdict", "GENUINE")).upper()
-        if "FAKE" in v:
+        if "FAKE" in v or raw_score >= 60:
             result["verdict"] = "FAKE"
-        elif "SUSPICIOUS" in v:
+            result["risk_score"] = max(60, raw_score)
+        elif "SUSPICIOUS" in v or raw_score >= 25:
             result["verdict"] = "SUSPICIOUS"
+            result["risk_score"] = max(25, raw_score)
         else:
             result["verdict"] = "GENUINE"
-            if result["risk_score"] > 24:
-                result["risk_score"] = 10
+            result["risk_score"] = min(20, raw_score)
 
+        result["confidence"] = _safe_int(result.get("confidence"), 90)
         result.setdefault("anomalies", [])
         result.setdefault("tampered_regions", [])
         result.setdefault("summary", "Document screening analysis completed.")
+
+        # Post-process: Include localized ELA anomalies if detected by computer vision
+        ela_res = perform_ela_analysis(image_bytes, quality=90)
+        if ela_res.get("ela_score", 0) >= 30:
+            for r in ela_res.get("tampered_regions", []):
+                if not any(r["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
+                    result["tampered_regions"].append(r)
+            for a in ela_res.get("anomalies", []):
+                if not any(a["type"] in an.get("type", "") for an in result["anomalies"]):
+                    result["anomalies"].append(a)
+            if result["risk_score"] < 40:
+                result["risk_score"] = min(100, result["risk_score"] + ela_res["ela_score"])
+                if result["risk_score"] >= 60:
+                    result["verdict"] = "FAKE"
+                elif result["risk_score"] >= 25:
+                    result["verdict"] = "SUSPICIOUS"
 
         # Post-process EXIF software warnings if present
         if exif_flags:
@@ -330,9 +333,12 @@ def analyze_document(
                             "description": f"EXIF metadata indicates file was processed with editing software: {flag}",
                             "severity": "HIGH"
                         })
-                    if result["risk_score"] < 40:
-                        result["risk_score"] = 45
-                        result["verdict"] = "SUSPICIOUS"
+                    if result["risk_score"] < 50:
+                        result["risk_score"] = min(100, result["risk_score"] + 40)
+                        if result["risk_score"] >= 60:
+                            result["verdict"] = "FAKE"
+                        elif result["risk_score"] >= 25:
+                            result["verdict"] = "SUSPICIOUS"
 
         return result
 

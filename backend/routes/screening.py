@@ -92,26 +92,30 @@ async def screen_document(
                 live_bytes,
                 document_type
             )
-            # Factor face liveness and identity match into document risk score if suspicious
+            # Factor face liveness and identity match into document risk score if confirmed spoof/mismatch
             if face_verification:
-                if not face_verification.get("is_live", True):
+                l_score = face_verification.get("liveness_score", 100)
+                m_score = face_verification.get("match_score", 100)
+
+                if l_score < 40 and not face_verification.get("is_live", True):
                     ai_result["anomalies"].append({
                         "type": "FaceLiveness",
                         "description": f"Face Anti-Spoofing Failure: {face_verification.get('liveness_details')}",
                         "severity": "HIGH"
                     })
                     ai_result["risk_score"] = min(100, ai_result["risk_score"] + 35)
-                if face_verification.get("match_verdict") == "MISMATCH":
+
+                if m_score < 35 and face_verification.get("match_verdict") == "MISMATCH":
                     ai_result["anomalies"].append({
                         "type": "IdentityMatch",
-                        "description": f"Face Identity Mismatch: Live selfie does not match document photo ({face_verification.get('match_score')}% similarity)",
+                        "description": f"Face Identity Mismatch: Live selfie does not match document photo ({m_score}% similarity)",
                         "severity": "HIGH"
                     })
                     ai_result["risk_score"] = min(100, ai_result["risk_score"] + 45)
 
                 if ai_result["risk_score"] >= 60:
                     ai_result["verdict"] = "FAKE"
-                elif ai_result["risk_score"] >= 25 and ai_result["verdict"] == "GENUINE":
+                elif ai_result["risk_score"] >= 30 and ai_result["verdict"] == "GENUINE":
                     ai_result["verdict"] = "SUSPICIOUS"
 
         # ── Annotate Image (offloaded to threadpool) ──────────────────

@@ -39,33 +39,30 @@ MODEL_NAME = "gemini-3.5-flash"
 
 DOC_HINTS = {
     "aadhaar": (
-        "This is an Indian Aadhaar Card. It should have: a 12-digit Aadhaar number (e.g. 1234 5678 9012), "
-        "the UIDAI hologram/logo, the Indian government emblem, a QR code, the citizen's "
-        "photo, name, DOB, and address in English and one regional language. "
-        "The card has a standard blue-white gradient design."
+        "This is an Indian Aadhaar Card (UIDAI). Authentic forms include physical PVC smart cards, "
+        "e-Aadhaar printed letters, and digital Aadhaar slips. It contains a 12-digit Aadhaar number, "
+        "UIDAI emblem/logo, QR code, photo, name, DOB, and address. Regional language text alongside English is standard."
     ),
     "passport": (
-        "This is an Indian Passport. It should have: a navy blue cover, the Ashoka Pillar "
-        "emblem, MRZ (Machine Readable Zone) lines at the bottom, the holder's photo, "
-        "passport number, issue/expiry dates, and personal details."
+        "This is an Indian Passport. Authentic forms include standard navy blue passport booklets and official passports. "
+        "It contains the Ashoka Pillar emblem, holder's portrait, passport number, issue/expiry dates, "
+        "and Machine Readable Zone (MRZ) lines at the bottom."
     ),
     "pan": (
-        "This is an Indian PAN Card (Permanent Account Number). It should have: "
-        "a 10-character alphanumeric PAN number (formatted as 5 letters, 4 digits, 1 letter, e.g., ABCDE1234F), "
-        "the Income Tax Department logo, the holder's photo and signature, name, father's name, and date of birth."
+        "This is an Indian PAN Card (Permanent Account Number). Authentic forms include traditional blue-header cards, "
+        "newer QR-code PVC cards, and NSDL/UTIITSL e-PAN documents. It contains a 10-character alphanumeric PAN number "
+        "(e.g., ABCDE1234F), Income Tax Department emblem, holder's photo, signature, name, father's name, and DOB."
     ),
     "driving_license": (
-        "This is an Indian Driving License. It MUST have: "
-        "1. Valid Driving License Number format (2-letter State Code + 2-digit RTO Code + 4-digit Year + 7 digits, e.g., DL-0420110012345, MH12 20180012345, KA01 20200001234). "
-        "2. State Transport Department Emblem/Logo. "
-        "3. License holder photo, Name, DOB, Blood Group, Vehicle Categories (LMV, MCWG), Issue & Expiry Dates. "
-        "FORENSIC CHECK FOR DRIVING LICENSES: Perform hyper-vigilant character-level inspection of all text fields. "
-        "Check if Name, License Number, DOB, Expiry Date, or Address show mismatched typography, different font families, uneven character sizes, digital font overlays, white/grey background paint patches, smudged pixels, or pasted photo cutouts. "
-        "If ANY text field or number is digitally altered, re-typed, or pasted, YOU MUST assign verdict `FAKE` (risk_score 75 to 100) and pinpoint tampered_regions."
+        "This is an Indian Driving License issued by a State Transport Department or Sarathi Parivahan portal. "
+        "Authentic formats vary widely across Indian states (e.g. MH, DL, KA, TN, UP, GJ, RJ, WB, KL, HR, PB, TS, AP) "
+        "and include smart cards, laminated paper cards, and mParivahan digital DLs. "
+        "DL numbers may contain slashes, hyphens, or spaces (e.g., DL-0420110012345, MH12 20180012345, KA01/2020/0001234, TN-01-20150012345). "
+        "All valid state formats are GENUINE. Only flag as FAKE if there is undeniable digital text editing, altered font styles, painted-over text boxes, or pasted photo cutouts."
     ),
     "other": (
-        "This is an official government identity document. Analyze it for any signs of "
-        "forgery, tampering, or inconsistencies with genuine government-issued documents."
+        "This is an official government identity document. Analyze it for any genuine signs of "
+        "forgery, digital tampering, or text alteration."
     ),
 }
 
@@ -82,19 +79,23 @@ def build_prompt(document_type: str, exif_flags: Optional[List[str]] = None) -> 
             exif_text = "\nEXIF Metadata Analysis Warnings:\n" + "\n".join([f"- {f}" for f in sw_flags])
 
     return f"""You are a senior forensic document authentication expert with 20 years of experience 
-detecting forged, edited, and tampered identity documents for law enforcement agencies.
+authenticating government identity documents for law enforcement agencies.
 
 Document Context: {hint}
 {exif_text}
 
-MANDATORY FORENSIC ANALYSIS RULES:
-1. **Detecting Forgeries & Alterations**:
-   - Inspect the document for fake/altered text, mismatched font styles, edited ID numbers, inconsistent character spacing, clone stamp artifacts, painted-over text boxes, pasted photo cutouts, or fake templates.
-   - For Driving Licenses: Cross-check the Driving License Number format (e.g. DL-0420110012345). Verify if Name, License Number, DOB, or Expiry Dates show font mismatches or image editing artifacts.
-   - If ANY text fields are altered, fonts are mismatched, digits are edited, or the face photo is pasted, you MUST assign verdict `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) and list the exact tampered_regions with percentages [x, y, w, h].
+MANDATORY FORENSIC EVALUATION INSTRUCTIONS:
+1. **Evaluating Genuine Documents**:
+   - Indian government identity documents (Aadhaar, Driving License, PAN, Passport) exist in many legitimate regional formats, state layouts, PVC smart cards, and digital e-card printouts.
+   - If the document is an authentic state or central government issued identity document with consistent font typography, valid layout, and NO signs of digital image editing or text alteration, YOU MUST ASSIGN verdict `GENUINE` (risk_score 0 to 15).
 
-2. **Detecting Genuine Documents**:
-   - If the document is an authentic government-issued identity card with consistent typography, valid ID formatting, clean security emblems, and NO signs of text alteration or photo manipulation, assign verdict `GENUINE` (risk_score 0 to 15).
+2. **Detecting Digital Forgeries & Text Alterations**:
+   - Only assign `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) if there is clear, observable evidence of digital manipulation:
+     a) Re-typed text with mismatched font families, pixelated font overlays, or inconsistent font sizes.
+     b) Rectangular white/grey background paint patches drawn over original text to alter names, numbers, or dates.
+     c) Spliced or pasted photo cutouts over original portraits.
+     d) Fabricated mock-up cards that completely lack government security logos, text fields, or photos.
+   - If fake/altered, pinpoint tampered_regions with percentages [x, y, w, h].
 
 Respond ONLY with a valid JSON object (no markdown explanation outside JSON):
 
@@ -123,7 +124,7 @@ Respond ONLY with a valid JSON object (no markdown explanation outside JSON):
 
     Rules:
     - risk_score calibration: 0-24 → GENUINE, 25-59 → SUSPICIOUS, 60-100 → FAKE.
-    - Be rigorous and objective. Fake/altered documents MUST be assigned FAKE (risk_score 65-100).
+    - Be objective. Authentic state identity cards MUST be evaluated as GENUINE (risk_score 0-15).
     """
 
 
@@ -179,22 +180,25 @@ def generate_local_forensic_report(
 
     # 2. Error Level Analysis (ELA)
     ela_res = perform_ela_analysis(image_bytes, quality=90)
-    if ela_res.get("ela_score", 0) > 0:
-        risk_score += ela_res["ela_score"]
+    e_score = ela_res.get("ela_score", 0)
+    if e_score >= 35:
         tampered_regions.extend(ela_res.get("tampered_regions", []))
         anomalies.extend(ela_res.get("anomalies", []))
+        if e_score >= 70:
+            risk_score = max(risk_score, 65)
+        else:
+            risk_score = max(risk_score, 35)
 
-    # 3. Document Layout & Aspect Ratio & Text Patch Analysis
+    # 3. Document Layout & Aspect Ratio Analysis
     layout_score, layout_anomalies, layout_regions = analyze_document_layout_and_face(image_bytes, document_type)
     if layout_score > 0:
-        risk_score += layout_score
         anomalies.extend(layout_anomalies)
         tampered_regions.extend(layout_regions)
+        risk_score = max(risk_score, 30)
 
     # 4. Noise Variance Analysis
     noise_res = analyze_regional_noise(image_bytes)
     if noise_res.get("noise_score", 0) > 0:
-        risk_score += noise_res["noise_score"]
         anomalies.extend(noise_res.get("anomalies", []))
 
     # Ensure bounds

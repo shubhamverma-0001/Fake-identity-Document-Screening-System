@@ -204,6 +204,47 @@ def analyze_document_layout_and_face(image_bytes: bytes, document_type: str) -> 
                     "severity": "LOW"
                 })
 
+        # Face Photo Splicing & Pasted Photo Boundary Check
+        CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        if os.path.exists(CASCADE_PATH):
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            face_cascade = cv2.CascadeClassifier(CASCADE_PATH)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40, 40))
+            for (fx, fy, fw, fh) in faces:
+                # Check bounding border ring around face
+                y1, y2 = max(0, fy - 8), min(h, fy + fh + 8)
+                x1, x2 = max(0, fx - 8), min(w, fx + fw + 8)
+                face_sub = gray[fy:fy+fh, fx:fx+fw]
+                if face_sub.size > 0:
+                    face_std = float(np.std(face_sub))
+                    # Compute Canny edge density along outer boundary
+                    border_mask = np.zeros_like(gray)
+                    cv2.rectangle(border_mask, (x1, y1), (x2, y2), 255, 3)
+                    edges = cv2.Canny(gray, 50, 150)
+                    border_edges = cv2.bitwise_and(edges, edges, mask=border_mask)
+                    b_density = float(np.mean(border_edges))
+
+                    # High sharp rectangular edge density around face ROI indicates pasted photo
+                    if b_density > 35.0 and face_std > 15.0:
+                        x_pct = round((fx / w) * 100, 1)
+                        y_pct = round((fy / h) * 100, 1)
+                        w_pct = round((fw / w) * 100, 1)
+                        h_pct = round((fh / h) * 100, 1)
+                        tampered_regions.append({
+                            "label": "Pasted / Spliced Photo Box",
+                            "x": x_pct,
+                            "y": y_pct,
+                            "w": w_pct,
+                            "h": h_pct,
+                        })
+                        score += 40
+                        anomalies.append({
+                            "type": "Photo",
+                            "description": "Detected sharp boundary edge artifacts and noise disparity typical of a digitally pasted or spliced face photo.",
+                            "severity": "HIGH"
+                        })
+                        break
+
     except Exception:
         pass
 

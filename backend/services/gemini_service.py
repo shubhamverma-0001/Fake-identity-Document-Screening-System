@@ -54,15 +54,17 @@ DOC_HINTS = {
         "(e.g., ABCDE1234F), Income Tax Department emblem, holder's photo, signature, name, father's name, and DOB."
     ),
     "driving_license": (
-        "This is an Indian Driving License issued by a State Transport Department or Sarathi Parivahan portal. "
-        "Authentic formats vary widely across Indian states (e.g. MH, DL, KA, TN, UP, GJ, RJ, WB, KL, HR, PB, TS, AP) "
-        "and include smart cards, laminated paper cards, and mParivahan digital DLs. "
+        "This is an Indian Driving License issued by a State Transport Department or Sarathi Parivahan portal / DigiLocker. "
+        "Authentic formats include smart cards, laminated paper cards, and DigiLocker / mParivahan digital DL exports. "
         "DL numbers may contain slashes, hyphens, or spaces (e.g., DL-0420110012345, MH12 20180012345, KA01/2020/0001234, TN-01-20150012345). "
-        "All valid state formats are GENUINE. Only flag as FAKE if there is undeniable digital text editing, altered font styles, painted-over text boxes, or pasted photo cutouts."
+        "CRITICAL PHOTO & TEXT FORENSIC CHECK: Carefully inspect BOTH the holder portrait photo box and text fields. "
+        "If the portrait photo has been digitally swapped, pasted over the original frame, cropped from a separate photo, "
+        "or shows boundary line mismatch, pixelation discrepancy, or painted text boxes, YOU MUST MARK IT `FAKE` (risk_score 70 to 100) "
+        "and pinpoint the exact tampered_regions."
     ),
     "other": (
         "This is an official government identity document. Analyze it for any genuine signs of "
-        "forgery, digital tampering, or text alteration."
+        "forgery, digital tampering, text alteration, or photo replacement."
     ),
 }
 
@@ -86,15 +88,15 @@ Document Context: {hint}
 
 MANDATORY FORENSIC EVALUATION INSTRUCTIONS:
 1. **Evaluating Genuine Documents**:
-   - Indian government identity documents (Aadhaar, Driving License, PAN, Passport) exist in many legitimate regional formats, state layouts, PVC smart cards, and digital e-card printouts.
-   - If the document is an authentic state or central government issued identity document with consistent font typography, valid layout, and NO signs of digital image editing or text alteration, YOU MUST ASSIGN verdict `GENUINE` (risk_score 0 to 15).
+   - Indian government identity documents (Aadhaar, Driving License, PAN, Passport) exist in many legitimate regional formats, state layouts, PVC smart cards, and digital DigiLocker e-card printouts.
+   - If the document is an authentic state or central government issued identity document with consistent font typography, authentic portrait photo placement, valid layout, and NO signs of digital image editing, text alteration, or photo replacement, YOU MUST ASSIGN verdict `GENUINE` (risk_score 0 to 15).
 
-2. **Detecting Digital Forgeries & Text Alterations**:
-   - Only assign `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) if there is clear, observable evidence of digital manipulation:
-     a) Re-typed text with mismatched font families, pixelated font overlays, or inconsistent font sizes.
-     b) Rectangular white/grey background paint patches drawn over original text to alter names, numbers, or dates.
-     c) Spliced or pasted photo cutouts over original portraits.
-     d) Fabricated mock-up cards that completely lack government security logos, text fields, or photos.
+2. **Detecting Digital Forgeries, Text Alterations & Photo Replacement**:
+   - Assign `FAKE` (risk_score 65 to 100) or `SUSPICIOUS` (risk_score 35 to 60) if ANY of the following digital alterations exist:
+     a) **Photo Box Replacement / Splicing**: The portrait photo is digitally pasted, swapped, replaced with a selfie, shows sharp box boundary cuts, or has resolution/lighting mismatch with the document canvas.
+     b) **Text Field Alteration**: Re-typed text with mismatched font families, pixelated font overlays, or inconsistent font sizes.
+     c) **Paint Box / Erasure**: Rectangular white/grey background patches drawn over original text or photo regions to overwrite details.
+     d) **Fabricated Template**: Completely fake mock-up cards lacking official government logos or security features.
    - If fake/altered, pinpoint tampered_regions with percentages [x, y, w, h].
 
 Respond ONLY with a valid JSON object (no markdown explanation outside JSON):

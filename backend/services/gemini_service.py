@@ -310,7 +310,7 @@ def analyze_document(
         result.setdefault("tampered_regions", [])
         result.setdefault("summary", "Document screening analysis completed.")
 
-        # Post-process: Cross-check local CV layout & painted text patch anomalies
+        # Post-process: Cross-check local CV layout anomalies
         l_score, l_anomalies, l_regions = analyze_document_layout_and_face(image_bytes, document_type)
         if l_score > 0:
             for la in l_anomalies:
@@ -319,24 +319,19 @@ def analyze_document(
             for lr in l_regions:
                 if not any(lr["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
                     result["tampered_regions"].append(lr)
-            if l_score >= 25 and result["risk_score"] < 50:
-                result["risk_score"] = min(100, result["risk_score"] + l_score)
-                if result["risk_score"] >= 60:
-                    result["verdict"] = "FAKE"
-                elif result["risk_score"] >= 25:
-                    result["verdict"] = "SUSPICIOUS"
 
         # Post-process: Include localized ELA anomalies if detected by computer vision
         ela_res = perform_ela_analysis(image_bytes, quality=90)
-        if ela_res.get("ela_score", 0) >= 30:
+        if ela_res.get("ela_score", 0) >= 45:
             for r in ela_res.get("tampered_regions", []):
                 if not any(r["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
                     result["tampered_regions"].append(r)
             for a in ela_res.get("anomalies", []):
                 if not any(a["type"] in an.get("type", "") for an in result["anomalies"]):
                     result["anomalies"].append(a)
-            if result["risk_score"] < 40:
-                result["risk_score"] = min(100, result["risk_score"] + ela_res["ela_score"])
+            # Only escalate if Gemini did NOT explicitly declare document GENUINE or if ELA is extremely high (>60)
+            if result["verdict"] != "GENUINE" or ela_res.get("ela_score", 0) >= 60:
+                result["risk_score"] = min(100, max(result["risk_score"], ela_res["ela_score"]))
                 if result["risk_score"] >= 60:
                     result["verdict"] = "FAKE"
                 elif result["risk_score"] >= 25:
@@ -352,12 +347,8 @@ def analyze_document(
                             "description": f"EXIF metadata indicates file was processed with editing software: {flag}",
                             "severity": "HIGH"
                         })
-                    if result["risk_score"] < 50:
-                        result["risk_score"] = min(100, result["risk_score"] + 40)
-                        if result["risk_score"] >= 60:
-                            result["verdict"] = "FAKE"
-                        elif result["risk_score"] >= 25:
-                            result["verdict"] = "SUSPICIOUS"
+                    result["risk_score"] = min(100, max(result["risk_score"], 65))
+                    result["verdict"] = "FAKE"
 
         return result
 

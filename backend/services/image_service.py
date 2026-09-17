@@ -24,13 +24,12 @@ SUSPICIOUS_SOFTWARE = [
 
 
 def extract_exif_flags(image_bytes: bytes) -> List[str]:
-    """Extract EXIF metadata and return a list of suspicious flags."""
+    """Extract EXIF metadata and return a list of suspicious flags if editing software is present."""
     flags = []
     try:
         img = Image.open(io.BytesIO(image_bytes))
         exif_data = img._getexif()
         if exif_data is None:
-            flags.append("No EXIF metadata found — possible re-save or screenshot")
             return flags
 
         tag_map = {ExifTags.TAGS.get(k, k): v for k, v in exif_data.items()}
@@ -42,12 +41,6 @@ def extract_exif_flags(image_bytes: bytes) -> List[str]:
                 flags.append(f"Edited with image software: {tag_map.get('Software')}")
                 break
 
-        # Check for mismatched make/model
-        make = tag_map.get("Make", "")
-        model = tag_map.get("Model", "")
-        if not make and not model:
-            flags.append("Camera make/model missing — possible digital creation")
-
         # Check for unusual DateTime
         dt_orig = tag_map.get("DateTimeOriginal")
         dt_mod = tag_map.get("DateTime")
@@ -55,7 +48,7 @@ def extract_exif_flags(image_bytes: bytes) -> List[str]:
             flags.append(f"Modification date differs from capture date ({dt_orig} vs {dt_mod})")
 
     except Exception:
-        flags.append("Could not parse EXIF data — file may be manipulated")
+        pass
 
     return flags
 
@@ -190,8 +183,7 @@ def analyze_regional_noise(image_bytes: bytes) -> Dict[str, Any]:
 
 def analyze_document_layout_and_face(image_bytes: bytes, document_type: str) -> Tuple[int, List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Perform local computer vision analysis on document layout, aspect ratio,
-    and unnaturally uniform solid rectangular paint/white-out patches typical of text alteration.
+    Perform local computer vision analysis on document layout and aspect ratio.
     """
     anomalies = []
     tampered_regions = []
@@ -206,54 +198,15 @@ def analyze_document_layout_and_face(image_bytes: bytes, document_type: str) -> 
         h, w = img.shape[:2]
         aspect_ratio = round(w / float(h), 2)
 
-        # 1. Aspect Ratio Check (only flag severe distortions)
+        # Aspect Ratio Check (only flag severe distortions)
         if document_type.lower() in ["aadhaar", "pan", "driving_license"]:
-            if aspect_ratio < 0.8 or aspect_ratio > 2.8:
+            if aspect_ratio < 0.6 or aspect_ratio > 3.2:
                 score += 15
                 anomalies.append({
                     "type": "Alignment",
                     "description": f"Non-standard document crop aspect ratio ({aspect_ratio}:1).",
                     "severity": "LOW"
                 })
-
-        # 2. Text Patch & Paint Edit Detection (detects painted-over rectangles with sharp bounding edges)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 50, 150)
-        grid_r, grid_c = 6, 6
-        ch_h, ch_w = h / grid_r, w / grid_c
-
-        for r in range(1, grid_r - 1):
-            for c in range(1, grid_c - 1):
-                y1, y2 = int(r * ch_h), int((r + 1) * ch_h)
-                x1, x2 = int(c * ch_w), int((c + 1) * ch_w)
-                cell = gray[y1:y2, x1:x2]
-                cell_edges = edges[y1:y2, x1:x2]
-                if cell.size > 0:
-                    c_std = float(np.std(cell))
-                    c_mean = float(np.mean(cell))
-                    edge_density = float(np.mean(cell_edges))
-                    # Requires zero-variance interior with high bounding edge density (pasted white/grey box edit over card)
-                    if c_std < 0.5 and (c_mean > 235 or c_mean < 20) and edge_density > 30.0:
-                        x_pct = round((x1 / w) * 100, 1)
-                        y_pct = round((y1 / h) * 100, 1)
-                        w_pct = round((x2 - x1) / w * 100, 1)
-                        h_pct = round((y2 - y1) / h * 100, 1)
-
-                        tampered_regions.append({
-                            "label": "Altered Text Patch / Paint Box",
-                            "x": x_pct,
-                            "y": y_pct,
-                            "w": w_pct,
-                            "h": h_pct,
-                        })
-
-        if tampered_regions:
-            score += min(50, 25 + len(tampered_regions) * 15)
-            anomalies.append({
-                "type": "Manipulation",
-                "description": f"Detected {len(tampered_regions)} region(s) with unnaturally uniform color patches typical of painted-over or erased text fields.",
-                "severity": "HIGH"
-            })
 
     except Exception:
         pass

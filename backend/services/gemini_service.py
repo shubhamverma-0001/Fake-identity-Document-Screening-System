@@ -324,7 +324,7 @@ def analyze_document(
 
         # Post-process: Include localized ELA anomalies if detected by computer vision
         ela_res = perform_ela_analysis(image_bytes, quality=90)
-        if ela_res.get("ela_score", 0) >= 35:
+        if ela_res.get("ela_score", 0) >= 40:
             for r in ela_res.get("tampered_regions", []):
                 if not any(r["label"] in tr.get("label", "") for tr in result["tampered_regions"]):
                     result["tampered_regions"].append(r)
@@ -332,14 +332,17 @@ def analyze_document(
                 if not any(a["type"] in an.get("type", "") for an in result["anomalies"]):
                     result["anomalies"].append(a)
 
-            # ELA compression disparity indicates localized image/text editing
-            if ela_res.get("ela_score", 0) >= 50:
+            # Only escalate risk score if Gemini did NOT confirm the document is GENUINE
+            # or if Gemini's confidence was low (< 70) and ELA score is extreme (> 75)
+            if result["verdict"] != "GENUINE":
                 result["risk_score"] = min(100, max(result["risk_score"], ela_res["ela_score"]))
-                result["verdict"] = "FAKE"
-            elif ela_res.get("ela_score", 0) >= 35:
-                result["risk_score"] = min(100, max(result["risk_score"], 40))
-                if result["verdict"] == "GENUINE":
+                if result["risk_score"] >= 60:
+                    result["verdict"] = "FAKE"
+                elif result["risk_score"] >= 25:
                     result["verdict"] = "SUSPICIOUS"
+            elif ela_res.get("ela_score", 0) >= 75 and result.get("confidence", 100) < 70:
+                result["risk_score"] = 35
+                result["verdict"] = "SUSPICIOUS"
 
         # Post-process EXIF software warnings if present
         if exif_flags:
